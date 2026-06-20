@@ -67,7 +67,10 @@ async function obterMelhorStreamDisponivel(resolucoesEmOrdem, facingMode, fps) {
     for (const resolucao of resolucoesEmOrdem) {
         try {
             const constraints = {
-                audio: false,
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true
+                },
                 video: {
                     facingMode: { ideal: facingMode },
                     width: { ideal: resolucao.width },

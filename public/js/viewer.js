@@ -15,6 +15,27 @@
     let iceConfig = { stunServers: [], turnServers: [] };
 
     /**
+     * Navegadores bloqueiam autoplay de vídeo com áudio sem interação prévia
+     * do usuário. Se isso acontecer, reproduz mutado e ativa o som no primeiro
+     * toque na tela — assim o vídeo nunca trava esperando uma ação explícita.
+     */
+    function tentarReproduzirComAudio() {
+        elRemoteVideo.muted = false;
+        elRemoteVideo.play().catch(() => {
+            elRemoteVideo.muted = true;
+            elRemoteVideo.play().catch(() => {});
+
+            const ativarSom = () => {
+                elRemoteVideo.muted = false;
+                document.removeEventListener('click', ativarSom);
+                document.removeEventListener('touchend', ativarSom);
+            };
+            document.addEventListener('click', ativarSom, { once: true });
+            document.addEventListener('touchend', ativarSom, { once: true });
+        });
+    }
+
+    /**
      * Cria a RTCPeerConnection do espectador. As tracks remotas recebidas são
      * conectadas diretamente ao elemento <video> para exibição em tempo real.
      */
@@ -24,6 +45,7 @@
         pc.ontrack = (event) => {
             if (elRemoteVideo.srcObject !== event.streams[0]) {
                 elRemoteVideo.srcObject = event.streams[0];
+                tentarReproduzirComAudio();
             }
         };
 
