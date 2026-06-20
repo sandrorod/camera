@@ -99,7 +99,7 @@ html, body {
 
 /* ----- Camera stage (broadcaster) ----- */
 
-.camera-stage, .viewer-stage {
+.camera-stage {
     position: relative;
     flex: 1;
     background: #000;
@@ -116,9 +116,18 @@ html, body {
     background: #000;
 }
 
+/* ----- Viewer stage: ocupa a tela inteira, sem nenhum outro elemento de UI ----- */
+
 .viewer-stage-fullscreen {
+    position: fixed;
+    inset: 0;
     width: 100vw;
     height: 100vh;
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
 }
 
 .sr-only {
@@ -342,7 +351,8 @@ html, body {
 /* ----- Viewer page ----- */
 
 .viewer-message-screen {
-    flex: 1;
+    position: fixed;
+    inset: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
