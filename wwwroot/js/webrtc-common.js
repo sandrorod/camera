@@ -29,8 +29,14 @@ function montarIceServers(config) {
  * Cria e inicia uma conexão SignalR com reconexão automática (backoff progressivo)
  * e retorna a instância da conexão já com handlers de ciclo de vida configurados.
  *
+ * O callback onEstadoMudou recebe a própria conexão como segundo argumento, pois
+ * o evento "conectado" pode disparar antes desta função retornar — código chamador
+ * que dependa da conexão dentro do callback deve usar esse argumento, não uma
+ * variável externa atribuída ao valor de retorno (que ainda seria undefined/null
+ * no momento do primeiro disparo).
+ *
  * @param {string} hubUrl - URL do hub SignalR (ex: "/hubs/camera").
- * @param {(estado: "conectando"|"conectado"|"reconectando"|"desconectado") => void} onEstadoMudou
+ * @param {(estado: "conectando"|"conectado"|"reconectando"|"desconectado", connection: any) => void} onEstadoMudou
  */
 async function criarConexaoSignalR(hubUrl, onEstadoMudou) {
     const connection = new signalR.HubConnectionBuilder()
@@ -41,20 +47,20 @@ async function criarConexaoSignalR(hubUrl, onEstadoMudou) {
 
     connection.onreconnecting(() => {
         console.warn('[SignalR] Conexão perdida. Tentando reconectar...');
-        onEstadoMudou && onEstadoMudou('reconectando');
+        onEstadoMudou && onEstadoMudou('reconectando', connection);
     });
 
     connection.onreconnected(() => {
         console.info('[SignalR] Reconectado com sucesso.');
-        onEstadoMudou && onEstadoMudou('conectado');
+        onEstadoMudou && onEstadoMudou('conectado', connection);
     });
 
     connection.onclose(() => {
         console.error('[SignalR] Conexão encerrada definitivamente.');
-        onEstadoMudou && onEstadoMudou('desconectado');
+        onEstadoMudou && onEstadoMudou('desconectado', connection);
     });
 
-    onEstadoMudou && onEstadoMudou('conectando');
+    onEstadoMudou && onEstadoMudou('conectando', connection);
 
     await iniciarComRetentativa(connection, onEstadoMudou);
 
@@ -68,10 +74,10 @@ async function criarConexaoSignalR(hubUrl, onEstadoMudou) {
 async function iniciarComRetentativa(connection, onEstadoMudou, tentativa = 0) {
     try {
         await connection.start();
-        onEstadoMudou && onEstadoMudou('conectado');
+        onEstadoMudou && onEstadoMudou('conectado', connection);
     } catch (erro) {
         console.error('[SignalR] Falha ao conectar:', erro);
-        onEstadoMudou && onEstadoMudou('reconectando');
+        onEstadoMudou && onEstadoMudou('reconectando', connection);
         const delay = Math.min(1000 * Math.pow(2, tentativa), 30000);
         await new Promise((resolve) => setTimeout(resolve, delay));
         await iniciarComRetentativa(connection, onEstadoMudou, tentativa + 1);

@@ -135,12 +135,12 @@
     }
 
     async function configurarSignalR() {
-        connection = await criarConexaoSignalR('/hubs/camera', (estado) => {
+        connection = await criarConexaoSignalR('/hubs/camera', (estado, conexaoAtual) => {
             if (estado === 'reconectando') {
                 definirStatus('Conexão perdida. Tentando reconectar automaticamente...');
             } else if (estado === 'conectado' && transmitindo) {
                 definirStatus('Reconectado. Retomando transmissão...');
-                connection.invoke('EntrarComoBroadcaster', config.token).catch(console.error);
+                (conexaoAtual || connection).invoke('EntrarComoBroadcaster', config.token).catch(console.error);
             }
         });
 

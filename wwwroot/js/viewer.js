@@ -81,12 +81,12 @@
     }
 
     async function configurarSignalR() {
-        connection = await criarConexaoSignalR('/hubs/camera', (estado) => {
+        connection = await criarConexaoSignalR('/hubs/camera', (estado, conexaoAtual) => {
             if (estado === 'reconectando') {
                 definirStatusConexao('Reconectando...', 'badge-connecting');
                 mostrarOverlay('Conexão com o servidor perdida. Tentando reconectar...');
             } else if (estado === 'conectado') {
-                entrarNaSessao();
+                entrarNaSessao(conexaoAtual);
             } else if (estado === 'desconectado') {
                 definirStatusConexao('Desconectado', 'badge-error');
             }
@@ -146,9 +146,10 @@
         });
     }
 
-    async function entrarNaSessao() {
+    async function entrarNaSessao(conexaoAtual) {
+        const conn = conexaoAtual || connection;
         definirStatusConexao('Conectando...', 'badge-connecting');
-        await connection.invoke('EntrarComoEspectador', config.token);
+        await conn.invoke('EntrarComoEspectador', config.token);
     }
 
     configurarSignalR();
