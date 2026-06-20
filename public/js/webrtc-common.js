@@ -49,9 +49,13 @@ function criarConexaoSocket(serverUrl, onEstadoMudou) {
 
     onEstadoMudou && onEstadoMudou('conectando', socket);
 
+    // O evento "connect" do Socket.io já dispara em toda reconexão bem-sucedida
+    // (não só na primeira conexão), então não é necessário também escutar
+    // "reconnect" separadamente — fazer os dois causava dois disparos seguidos
+    // de 'conectado' a cada reconexão, levando a duas chamadas concorrentes de
+    // entrarComoBroadcaster/entrarComoEspectador com o mesmo token.
     socket.on('connect', () => onEstadoMudou && onEstadoMudou('conectado', socket));
     socket.io.on('reconnect_attempt', () => onEstadoMudou && onEstadoMudou('reconectando', socket));
-    socket.io.on('reconnect', () => onEstadoMudou && onEstadoMudou('conectado', socket));
     socket.on('disconnect', () => onEstadoMudou && onEstadoMudou('desconectado', socket));
 
     return socket;
