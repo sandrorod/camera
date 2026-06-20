@@ -37,6 +37,44 @@
     let heartbeatIntervalId = null;
     let fpsObservadoIntervalId = null;
 
+    /** @type {WakeLockSentinel|null} */
+    let wakeLock = null;
+
+    /**
+     * Mantém a tela do celular ligada enquanto a transmissão estiver ativa,
+     * evitando que o sistema apague a tela e interrompa a captura de câmera
+     * por inatividade. Precisa ser readquirido ao voltar de background, pois
+     * o navegador libera o lock automaticamente quando a aba perde foco.
+     */
+    async function adquirirWakeLock() {
+        if (!('wakeLock' in navigator)) {
+            console.warn('[WakeLock] API não suportada neste navegador.');
+            return;
+        }
+
+        try {
+            wakeLock = await navigator.wakeLock.request('screen');
+            wakeLock.addEventListener('release', () => {
+                console.info('[WakeLock] Liberado pelo sistema.');
+            });
+        } catch (erro) {
+            console.warn('[WakeLock] Falha ao adquirir:', erro.message);
+        }
+    }
+
+    function liberarWakeLock() {
+        if (wakeLock) {
+            wakeLock.release().catch(() => {});
+            wakeLock = null;
+        }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+        if (transmitindo && document.visibilityState === 'visible' && !wakeLock) {
+            adquirirWakeLock();
+        }
+    });
+
     function definirStatus(mensagem) {
         elStatusMessage.textContent = mensagem;
     }
@@ -209,6 +247,7 @@
             definirStatus('Transmissão iniciada. Compartilhe o link para que outras pessoas assistam.');
 
             iniciarHeartbeat();
+            await adquirirWakeLock();
         } catch (erro) {
             console.error('[Broadcaster] Erro ao iniciar transmissão:', erro);
             definirStatus(`Não foi possível acessar a câmera: ${erro.message}`);
@@ -227,6 +266,7 @@
 
     async function pararTransmissao(notificarServidor = true) {
         transmitindo = false;
+        liberarWakeLock();
 
         if (heartbeatIntervalId) {
             clearInterval(heartbeatIntervalId);
