@@ -1,35 +1,17 @@
 // viewer.js
 // Controla a página do espectador: conecta-se via SignalR, recebe o Offer SDP
 // do transmissor, responde com Answer, troca ICE Candidates e exibe o vídeo
-// recebido via WebRTC peer-to-peer.
+// recebido via WebRTC peer-to-peer. A página não exibe nenhum texto ou indicador
+// visual — apenas o elemento <video> ocupando a tela inteira.
 
 (function () {
     const config = window.__SECURITYCAM_CONFIG__;
 
     const elRemoteVideo = document.getElementById('remote-video');
-    const elViewerOverlay = document.getElementById('viewer-overlay');
-    const elViewerOverlayText = document.getElementById('viewer-overlay-text');
-    const elConnectionStatus = document.getElementById('connection-status');
-    const elStreamQualityTag = document.getElementById('stream-quality-tag');
 
     let connection = null;
     let peerConnection = null;
     let broadcasterConnectionId = null;
-    let qualidadeIntervalId = null;
-
-    function definirStatusConexao(texto, classe) {
-        elConnectionStatus.textContent = texto;
-        elConnectionStatus.className = `badge badge-status ${classe}`;
-    }
-
-    function mostrarOverlay(texto) {
-        elViewerOverlayText.textContent = texto;
-        elViewerOverlay.classList.remove('hidden');
-    }
-
-    function ocultarOverlay() {
-        elViewerOverlay.classList.add('hidden');
-    }
 
     /**
      * Cria a RTCPeerConnection do espectador. As tracks remotas recebidas são
@@ -41,8 +23,6 @@
         pc.ontrack = (event) => {
             if (elRemoteVideo.srcObject !== event.streams[0]) {
                 elRemoteVideo.srcObject = event.streams[0];
-                ocultarOverlay();
-                monitorarQualidadeRecebida(event.streams[0]);
             }
         };
 
@@ -55,54 +35,20 @@
 
         pc.onconnectionstatechange = () => {
             console.info('[WebRTC] Estado da conexão com o transmissor:', pc.connectionState);
-
-            if (pc.connectionState === 'connected') {
-                definirStatusConexao('Conectado', 'badge-connected');
-            } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-                definirStatusConexao('Reconectando...', 'badge-connecting');
-                mostrarOverlay('Conexão perdida. Tentando reconectar...');
-            }
         };
 
         return pc;
     }
 
-    function monitorarQualidadeRecebida(stream) {
-        if (qualidadeIntervalId) clearInterval(qualidadeIntervalId);
-
-        qualidadeIntervalId = setInterval(() => {
-            const track = stream.getVideoTracks()[0];
-            if (!track) return;
-            const settings = track.getSettings();
-            if (settings.width && settings.height) {
-                elStreamQualityTag.textContent = `${settings.width}x${settings.height}`;
-            }
-        }, 3000);
-    }
-
     async function configurarSignalR() {
         connection = await criarConexaoSignalR('/hubs/camera', (estado, conexaoAtual) => {
-            if (estado === 'reconectando') {
-                definirStatusConexao('Reconectando...', 'badge-connecting');
-                mostrarOverlay('Conexão com o servidor perdida. Tentando reconectar...');
-            } else if (estado === 'conectado') {
+            if (estado === 'conectado') {
                 entrarNaSessao(conexaoAtual);
-            } else if (estado === 'desconectado') {
-                definirStatusConexao('Desconectado', 'badge-error');
             }
-        });
-
-        connection.on('BroadcasterOffline', () => {
-            definirStatusConexao('Aguardando transmissor', 'badge-connecting');
-            mostrarOverlay('O transmissor ainda não está online. Aguardando...');
         });
 
         connection.on('BroadcasterOnline', () => {
             entrarNaSessao();
-        });
-
-        connection.on('EspectadorConfirmado', () => {
-            definirStatusConexao('Conectando ao vídeo...', 'badge-connecting');
         });
 
         connection.on('ReceberOffer', async (broadcasterId, sdpOfferJson) => {
@@ -132,8 +78,6 @@
         });
 
         connection.on('TransmissaoEncerrada', () => {
-            definirStatusConexao('Transmissão encerrada', 'badge-error');
-            mostrarOverlay('A transmissão foi encerrada pelo transmissor.');
             if (peerConnection) {
                 peerConnection.close();
                 peerConnection = null;
@@ -141,14 +85,12 @@
         });
 
         connection.on('Erro', (mensagem) => {
-            definirStatusConexao('Erro', 'badge-error');
-            mostrarOverlay(mensagem);
+            console.error('[Viewer] Erro do servidor:', mensagem);
         });
     }
 
     async function entrarNaSessao(conexaoAtual) {
         const conn = conexaoAtual || connection;
-        definirStatusConexao('Conectando...', 'badge-connecting');
         await conn.invoke('EntrarComoEspectador', config.token);
     }
 
