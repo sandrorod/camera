@@ -8,11 +8,9 @@ namespace SecurityCam.Services;
 /// </summary>
 public interface IStreamSessionService
 {
-    Task<SessionModel> CriarSessaoAsync(string? senha, int? expiracaoMinutos);
+    Task<SessionModel> CriarSessaoAsync(int? expiracaoMinutos);
 
     Task<SessionModel?> ObterPorTokenAsync(string token);
-
-    Task<bool> ValidarSenhaAsync(string token, string senhaInformada);
 
     Task DefinirBroadcasterAsync(string token, string connectionId);
 

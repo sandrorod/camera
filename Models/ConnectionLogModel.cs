@@ -17,8 +17,7 @@ public enum TipoEventoConexao
     AnswerEnviado,
     IceCandidateTrocado,
     SessaoExpirada,
-    SessaoEncerrada,
-    TentativaSenhaInvalida
+    SessaoEncerrada
 }
 
 /// <summary>

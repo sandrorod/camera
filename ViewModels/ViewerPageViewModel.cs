@@ -11,8 +11,6 @@ public class ViewerPageViewModel
 
     public bool SessaoAtiva { get; set; }
 
-    public bool RequerSenha { get; set; }
-
     public List<string> StunServers { get; set; } = new();
 
     public List<TurnServerViewModel> TurnServers { get; set; } = new();

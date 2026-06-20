@@ -31,14 +31,6 @@ public class SessionModel
 
     public DateTime DataUltimaAtividade { get; set; } = DateTime.UtcNow;
 
-    /// <summary>
-    /// Hash da senha de proteção da transmissão (PBKDF2). Nulo se não houver senha.
-    /// </summary>
-    [MaxLength(256)]
-    public string? SenhaHash { get; set; }
-
-    public bool PossuiSenha => !string.IsNullOrEmpty(SenhaHash);
-
     public bool Ativa { get; set; } = true;
 
     public int QuantidadeEspectadores { get; set; } = 0;

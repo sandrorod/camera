@@ -50,9 +50,9 @@ public class CameraHub : Hub
 
     /// <summary>
     /// Chamado pelo navegador do espectador ao abrir o link de visualização.
-    /// Valida a sessão (incluindo senha, se houver) antes de admitir o espectador no grupo.
+    /// Valida se a sessão existe e está ativa antes de admitir o espectador no grupo.
     /// </summary>
-    public async Task EntrarComoEspectador(string token, string? senha)
+    public async Task EntrarComoEspectador(string token)
     {
         var session = await _sessionService.ObterPorTokenAsync(token);
 
@@ -60,16 +60,6 @@ public class CameraHub : Hub
         {
             await Clients.Caller.SendAsync("Erro", "Transmissão não encontrada, encerrada ou expirada.");
             return;
-        }
-
-        if (session.PossuiSenha)
-        {
-            var senhaValida = await _sessionService.ValidarSenhaAsync(token, senha ?? string.Empty);
-            if (!senhaValida)
-            {
-                await Clients.Caller.SendAsync("SenhaInvalida");
-                return;
-            }
         }
 
         var enderecoIp = Context.GetHttpContext()?.Connection.RemoteIpAddress?.ToString();

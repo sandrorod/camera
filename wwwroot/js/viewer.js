@@ -148,7 +148,7 @@
 
     async function entrarNaSessao() {
         definirStatusConexao('Conectando...', 'badge-connecting');
-        await connection.invoke('EntrarComoEspectador', config.token, null);
+        await connection.invoke('EntrarComoEspectador', config.token);
     }
 
     configurarSignalR();

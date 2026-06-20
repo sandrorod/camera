@@ -9,14 +9,10 @@ namespace SecurityCam.Services;
 /// Implementação do gerenciamento de sessões de transmissão usando EF Core + SQLite.
 /// Tokens são gerados com RNGCryptoServiceProvider (criptograficamente seguros) para
 /// que as URLs de compartilhamento sejam praticamente impossíveis de adivinhar.
-/// Senhas são armazenadas como hash PBKDF2, nunca em texto puro.
 /// </summary>
 public class StreamSessionService : IStreamSessionService
 {
     private const int TokenByteLength = 24; // ~32 caracteres base64url
-    private const int Pbkdf2Iterations = 100_000;
-    private const int Pbkdf2SaltSize = 16;
-    private const int Pbkdf2HashSize = 32;
 
     private readonly SecurityCamDbContext _db;
     private readonly ILogger<StreamSessionService> _logger;
@@ -27,7 +23,7 @@ public class StreamSessionService : IStreamSessionService
         _logger = logger;
     }
 
-    public async Task<SessionModel> CriarSessaoAsync(string? senha, int? expiracaoMinutos)
+    public async Task<SessionModel> CriarSessaoAsync(int? expiracaoMinutos)
     {
         var token = GerarTokenSeguro();
 
@@ -37,7 +33,6 @@ public class StreamSessionService : IStreamSessionService
             DataCriacao = DateTime.UtcNow,
             DataUltimaAtividade = DateTime.UtcNow,
             Ativa = true,
-            SenhaHash = string.IsNullOrWhiteSpace(senha) ? null : GerarHashSenha(senha),
             DataExpiracao = expiracaoMinutos.HasValue ? DateTime.UtcNow.AddMinutes(expiracaoMinutos.Value) : null
         };
 
@@ -55,24 +50,6 @@ public class StreamSessionService : IStreamSessionService
     {
         return await _db.Sessions
             .FirstOrDefaultAsync(s => s.Token == token);
-    }
-
-    public async Task<bool> ValidarSenhaAsync(string token, string senhaInformada)
-    {
-        var session = await ObterPorTokenAsync(token);
-        if (session is null || string.IsNullOrEmpty(session.SenhaHash))
-        {
-            return true; // sem senha configurada, acesso livre
-        }
-
-        var valido = VerificarSenha(senhaInformada, session.SenhaHash);
-
-        if (!valido)
-        {
-            await RegistrarLogAsync(token, TipoEventoConexao.TentativaSenhaInvalida, detalhes: "Senha incorreta informada pelo espectador");
-        }
-
-        return valido;
     }
 
     public async Task DefinirBroadcasterAsync(string token, string connectionId)
@@ -242,25 +219,4 @@ public class StreamSessionService : IStreamSessionService
             .Replace("=", "");
     }
 
-    private static string GerarHashSenha(string senha)
-    {
-        var salt = RandomNumberGenerator.GetBytes(Pbkdf2SaltSize);
-        var hash = Rfc2898DeriveBytes.Pbkdf2(senha, salt, Pbkdf2Iterations, HashAlgorithmName.SHA256, Pbkdf2HashSize);
-
-        return $"{Pbkdf2Iterations}.{Convert.ToBase64String(salt)}.{Convert.ToBase64String(hash)}";
-    }
-
-    private static bool VerificarSenha(string senha, string hashArmazenado)
-    {
-        var partes = hashArmazenado.Split('.', 3);
-        if (partes.Length != 3) return false;
-
-        var iteracoes = int.Parse(partes[0]);
-        var salt = Convert.FromBase64String(partes[1]);
-        var hashEsperado = Convert.FromBase64String(partes[2]);
-
-        var hashCalculado = Rfc2898DeriveBytes.Pbkdf2(senha, salt, iteracoes, HashAlgorithmName.SHA256, hashEsperado.Length);
-
-        return CryptographicOperations.FixedTimeEquals(hashCalculado, hashEsperado);
-    }
 }

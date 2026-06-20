@@ -6,11 +6,6 @@ namespace SecurityCam.ViewModels;
 public class CreateSessionRequest
 {
     /// <summary>
-    /// Senha opcional para proteger a transmissão. Nulo/vazio = sem senha.
-    /// </summary>
-    public string? Senha { get; set; }
-
-    /// <summary>
     /// Minutos até a expiração automática do link. Nulo = sem expiração.
     /// </summary>
     public int? ExpiracaoMinutos { get; set; }
@@ -28,22 +23,12 @@ public class CreateSessionResponse
 }
 
 /// <summary>
-/// Payload para validar a senha de uma transmissão protegida.
-/// </summary>
-public class ValidatePasswordRequest
-{
-    public string Token { get; set; } = string.Empty;
-    public string Senha { get; set; } = string.Empty;
-}
-
-/// <summary>
 /// Informações públicas e em tempo real sobre uma sessão (para polling/status).
 /// </summary>
 public class SessionStatusResponse
 {
     public string Token { get; set; } = string.Empty;
     public bool Ativa { get; set; }
-    public bool RequerSenha { get; set; }
     public bool Expirada { get; set; }
     public int QuantidadeEspectadores { get; set; }
     public DateTime DataUltimaAtividade { get; set; }

@@ -48,7 +48,7 @@ public class StreamController : Controller
     [HttpPost("/stream/criar")]
     public async Task<IActionResult> Criar([FromForm] int? expiracaoMinutos)
     {
-        var session = await _sessionService.CriarSessaoAsync(senha: null, expiracaoMinutos);
+        var session = await _sessionService.CriarSessaoAsync(expiracaoMinutos);
         return RedirectToAction(nameof(Broadcaster), new { token = session.Token });
     }
 
@@ -88,7 +88,6 @@ public class StreamController : Controller
             Token = token,
             SessaoExiste = session is not null,
             SessaoAtiva = session is { Ativa: true } && !session.Expirada,
-            RequerSenha = session?.PossuiSenha ?? false,
             StunServers = _webRtcConfigService.ObterStunServers(),
             TurnServers = _webRtcConfigService.ObterTurnServers()
         };
@@ -102,7 +101,7 @@ public class StreamController : Controller
     [HttpPost("/api/stream/sessions")]
     public async Task<ActionResult<CreateSessionResponse>> CriarSessaoApi([FromBody] CreateSessionRequest request)
     {
-        var session = await _sessionService.CriarSessaoAsync(request.Senha, request.ExpiracaoMinutos);
+        var session = await _sessionService.CriarSessaoAsync(request.ExpiracaoMinutos);
 
         var response = new CreateSessionResponse
         {
@@ -132,21 +131,10 @@ public class StreamController : Controller
         {
             Token = session.Token,
             Ativa = session.Ativa,
-            RequerSenha = session.PossuiSenha,
             Expirada = session.Expirada,
             QuantidadeEspectadores = session.QuantidadeEspectadores,
             DataUltimaAtividade = session.DataUltimaAtividade
         });
-    }
-
-    /// <summary>
-    /// API: valida a senha de uma transmissão protegida antes de conectar via SignalR.
-    /// </summary>
-    [HttpPost("/api/stream/sessions/validar-senha")]
-    public async Task<IActionResult> ValidarSenha([FromBody] ValidatePasswordRequest request)
-    {
-        var valido = await _sessionService.ValidarSenhaAsync(request.Token, request.Senha);
-        return Ok(new { valido });
     }
 
     /// <summary>
