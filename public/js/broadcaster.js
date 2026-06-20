@@ -49,16 +49,19 @@
     async function adquirirWakeLock() {
         if (!('wakeLock' in navigator)) {
             console.warn('[WakeLock] API não suportada neste navegador.');
+            definirStatus('Aviso: este navegador não suporta manter a tela acesa automaticamente.');
             return;
         }
 
         try {
             wakeLock = await navigator.wakeLock.request('screen');
+            console.info('[WakeLock] Adquirido com sucesso.');
             wakeLock.addEventListener('release', () => {
                 console.info('[WakeLock] Liberado pelo sistema.');
             });
         } catch (erro) {
-            console.warn('[WakeLock] Falha ao adquirir:', erro.message);
+            console.warn('[WakeLock] Falha ao adquirir:', erro.name, erro.message);
+            definirStatus(`Aviso: não foi possível manter a tela acesa (${erro.name}). Ative manualmente em Configurações > Tela > Tempo limite.`);
         }
     }
 
@@ -68,6 +71,18 @@
             wakeLock = null;
         }
     }
+
+    /**
+     * Alguns fabricantes (Samsung, Xiaomi etc) liberam o Wake Lock mesmo com a
+     * aba em foco, fora do ciclo de vida documentado pela API. Verifica
+     * periodicamente e readquire se necessário, como camada extra de defesa
+     * além do listener de visibilitychange.
+     */
+    setInterval(() => {
+        if (transmitindo && !wakeLock) {
+            adquirirWakeLock();
+        }
+    }, 15000);
 
     document.addEventListener('visibilitychange', () => {
         if (transmitindo && document.visibilityState === 'visible' && !wakeLock) {
