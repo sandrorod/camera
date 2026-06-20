@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using SecurityCam.Data;
 using SecurityCam.Hubs;
@@ -5,6 +6,14 @@ using SecurityCam.Services;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Railway (e plataformas similares) injetam a porta via variável de ambiente PORT
+// e fazem terminação TLS no proxy reverso deles, então a app escuta HTTP internamente.
+var porta = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrEmpty(porta))
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{porta}");
+}
 
 // ----- Logs estruturados (Serilog) -----
 // Console + arquivo rolante diário, com enriquecimento de contexto (machine name, thread id).
@@ -62,14 +71,6 @@ builder.Services.AddCors(options =>
     });
 });
 
-// HSTS força HTTPS em produção, requisito de segurança para getUserMedia funcionar fora de localhost.
-builder.Services.AddHsts(options =>
-{
-    options.Preload = true;
-    options.IncludeSubDomains = true;
-    options.MaxAge = TimeSpan.FromDays(365);
-});
-
 var app = builder.Build();
 
 // ----- Criação/migração automática do banco de dados no startup -----
@@ -91,12 +92,15 @@ using (var scope = app.Services.CreateScope())
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Stream/Erro");
-    app.UseHsts();
 }
 
-// HTTPS é obrigatório: getUserMedia (câmera/microfone) só funciona em contexto seguro
-// (HTTPS) ou em localhost. Em produção, o redirecionamento abaixo garante isso.
-app.UseHttpsRedirection();
+// Em plataformas como Railway, o proxy reverso já termina HTTPS e encaminha a
+// requisição internamente como HTTP — confiamos nos cabeçalhos X-Forwarded-* para
+// que Request.Scheme/IsHttps reflitam corretamente o protocolo público.
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
 
 app.UseStaticFiles();
 
