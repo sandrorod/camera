@@ -1,0 +1,46 @@
+@model ViewerPageViewModel
+@using System.Text.Json
+@{
+    ViewData["Title"] = "Assistindo Transmissão";
+    var jsonOptions = new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+}
+
+<div class="page page-viewer">
+
+    @if (!Model.SessaoExiste)
+    {
+        <div class="viewer-message-screen">
+            <h1>Transmissão não encontrada</h1>
+            <p>O link acessado é inválido ou a transmissão nunca existiu.</p>
+        </div>
+    }
+    else
+    {
+        <main class="viewer-stage viewer-stage-fullscreen">
+            <video id="remote-video" autoplay playsinline></video>
+
+            <div id="viewer-overlay" class="connection-overlay">
+                <p id="viewer-overlay-text">Conectando à transmissão...</p>
+            </div>
+
+            <!-- Elementos ocultos mantidos para compatibilidade com viewer.js (status/qualidade não exibidos visualmente) -->
+            <span id="connection-status" class="sr-only"></span>
+            <span id="stream-quality-tag" class="sr-only"></span>
+        </main>
+    }
+</div>
+
+@section Scripts {
+    @if (Model.SessaoExiste)
+    {
+        <script>
+            window.__SECURITYCAM_CONFIG__ = {
+                token: @Html.Raw(JsonSerializer.Serialize(Model.Token, jsonOptions)),
+                stunServers: @Html.Raw(JsonSerializer.Serialize(Model.StunServers, jsonOptions)),
+                turnServers: @Html.Raw(JsonSerializer.Serialize(Model.TurnServers, jsonOptions))
+            };
+        </script>
+        <script src="~/js/webrtc-common.js"></script>
+        <script src="~/js/viewer.js"></script>
+    }
+}

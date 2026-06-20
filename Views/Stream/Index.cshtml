@@ -1,0 +1,26 @@
+@{
+    ViewData["Title"] = "Nova Transmissão";
+}
+
+<div class="page page-home">
+    <div class="home-card">
+        <div class="home-logo">
+            <span class="rec-dot"></span>
+            <h1>SecurityCam</h1>
+        </div>
+        <p class="home-subtitle">Transforme seu celular em uma câmera de segurança acessível pela internet.</p>
+
+        <form method="post" action="/stream/criar" class="home-form">
+            <label class="field">
+                <span>Expiração do link (opcional, em minutos)</span>
+                <input type="number" name="expiracaoMinutos" min="1" placeholder="Ex: 120 (sem expiração se vazio)" />
+            </label>
+
+            <button type="submit" class="btn btn-primary btn-large">
+                Iniciar Nova Transmissão
+            </button>
+        </form>
+
+        <p class="home-hint">Abra esta página no celular que será usado como câmera.</p>
+    </div>
+</div>

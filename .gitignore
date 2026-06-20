@@ -1,0 +1,17 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+## Banco de dados local
+*.db
+*.db-shm
+*.db-wal
+
+## Logs
+logs/
+
+## Segredos
+appsettings.*.local.json

@@ -1,0 +1,88 @@
+@model BroadcasterViewModel
+@using System.Text.Json
+@{
+    ViewData["Title"] = "Transmissor";
+    var jsonOptions = new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+}
+
+<div class="page page-broadcaster">
+    <header class="topbar">
+        <div class="topbar-left">
+            <span id="rec-indicator" class="rec-indicator hidden">
+                <span class="rec-dot"></span> AO VIVO
+            </span>
+        </div>
+        <div class="topbar-right">
+            <span id="viewer-count" class="badge badge-viewers" title="Espectadores conectados">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5C21.3 7.6 17 4.5 12 4.5zm0 12.5a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
+                <span id="viewer-count-value">0</span>
+            </span>
+        </div>
+    </header>
+
+    <main class="camera-stage">
+        <video id="local-preview" autoplay playsinline muted></video>
+
+        <div id="connection-overlay" class="connection-overlay">
+            <p>Solicitando permissão da câmera...</p>
+        </div>
+
+        <div class="quality-indicator" id="quality-indicator">
+            <span id="quality-label">--</span>
+            <span id="fps-label">-- fps</span>
+        </div>
+    </main>
+
+    <section class="controls-panel">
+        <div class="controls-row">
+            <button id="btn-start" class="btn btn-primary">Iniciar Transmissão</button>
+            <button id="btn-stop" class="btn btn-danger hidden">Parar Transmissão</button>
+            <button id="btn-switch-camera" class="btn btn-secondary">Alternar Câmera</button>
+            <button id="btn-share" class="btn btn-accent hidden">Compartilhar</button>
+        </div>
+
+        <div class="controls-row controls-row-select">
+            <label class="select-field">
+                <span>Resolução</span>
+                <select id="select-resolution">
+                    <option value="3840x2160">4K (3840x2160)</option>
+                    <option value="1920x1080" selected>Full HD (1920x1080)</option>
+                    <option value="1280x720">HD (1280x720)</option>
+                    <option value="640x480">SD (640x480)</option>
+                </select>
+            </label>
+
+            <label class="select-field">
+                <span>FPS</span>
+                <select id="select-fps">
+                    <option value="30" selected>30 fps</option>
+                    <option value="24">24 fps</option>
+                    <option value="15">15 fps</option>
+                </select>
+            </label>
+        </div>
+
+        <div id="share-box" class="share-box hidden">
+            <p>Link de visualização (compartilhe com quem deve assistir):</p>
+            <div class="share-link-row">
+                <input id="share-link-input" type="text" readonly value="@Model.ViewerShareUrl" />
+                <button id="btn-copy-link" class="btn btn-secondary btn-small">Copiar</button>
+            </div>
+        </div>
+
+        <p id="status-message" class="status-message"></p>
+    </section>
+</div>
+
+@section Scripts {
+    <script>
+        window.__SECURITYCAM_CONFIG__ = {
+            token: @Html.Raw(JsonSerializer.Serialize(Model.Token, jsonOptions)),
+            viewerShareUrl: @Html.Raw(JsonSerializer.Serialize(Model.ViewerShareUrl, jsonOptions)),
+            stunServers: @Html.Raw(JsonSerializer.Serialize(Model.StunServers, jsonOptions)),
+            turnServers: @Html.Raw(JsonSerializer.Serialize(Model.TurnServers, jsonOptions))
+        };
+    </script>
+    <script src="~/js/webrtc-common.js"></script>
+    <script src="~/js/broadcaster.js"></script>
+}
