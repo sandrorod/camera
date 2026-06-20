@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0f14" />
+    <title>SecurityCam</title>
+    <link rel="stylesheet" href="/css/site.css" />
+</head>
+<body>
+    <div class="page page-home">
+        <div class="home-card">
+            <div class="home-logo">
+                <span class="rec-dot"></span>
+                <h1>SecurityCam</h1>
+            </div>
+            <p class="home-subtitle">Transforme seu celular em uma câmera de segurança acessível pela internet.</p>
+
+            <form id="form-criar" class="home-form">
+                <label class="field">
+                    <span>Expiração do link (opcional, em minutos)</span>
+                    <input type="number" id="input-expiracao" min="1" placeholder="Ex: 120 (sem expiração se vazio)" />
+                </label>
+
+                <button type="submit" class="btn btn-primary btn-large">
+                    Iniciar Nova Transmissão
+                </button>
+            </form>
+
+            <p class="home-hint">Abra esta página no celular que será usado como câmera.</p>
+        </div>
+    </div>
+
+    <script src="/config.js"></script>
+    <script>
+        document.getElementById('form-criar').addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            const expiracaoMinutos = document.getElementById('input-expiracao').value || null;
+
+            const resposta = await fetch(`${window.SECURITYCAM_SERVER_URL}/api/sessions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ expiracaoMinutos: expiracaoMinutos ? Number(expiracaoMinutos) : null })
+            });
+
+            const dados = await resposta.json();
+            window.location.href = `/broadcaster.html?token=${encodeURIComponent(dados.token)}`;
+        });
+    </script>
+</body>
+</html>

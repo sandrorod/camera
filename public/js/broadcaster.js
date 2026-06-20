@@ -1,6 +1,6 @@
 // broadcaster.js
 // Controla a página do transmissor: captura de câmera/microfone, preview local,
-// criação de uma RTCPeerConnection por espectador conectado, e signaling via SignalR.
+// criação de uma RTCPeerConnection por espectador conectado, e signaling via Socket.io.
 
 (function () {
     const config = window.__SECURITYCAM_CONFIG__;
@@ -22,12 +22,15 @@
     const elViewerCountValue = document.getElementById('viewer-count-value');
     const elStatusMessage = document.getElementById('status-message');
 
+    elShareLinkInput.value = config.viewerShareUrl;
+
     /** @type {MediaStream|null} */
     let localStream = null;
 
-    /** Mapa de RTCPeerConnection por connectionId de espectador. */
+    /** Mapa de RTCPeerConnection por socketId de espectador. */
     const peerConnections = new Map();
 
+    let iceConfig = { stunServers: [], turnServers: [] };
     let facingModeAtual = 'environment'; // câmera traseira por padrão
     let transmitindo = false;
     let connection = null;
@@ -55,7 +58,6 @@
         const resolucaoSelecionada = resolucaoSelecionadaParaObjeto(elSelectResolution.value);
         const fpsSelecionado = Number(elSelectFps.value);
 
-        // Tenta a resolução selecionada primeiro; se falhar, cai para as menores.
         const indiceInicial = RESOLUCOES_PADRAO.findIndex(
             (r) => r.width === resolucaoSelecionada.width && r.height === resolucaoSelecionada.height
         );
@@ -82,10 +84,6 @@
         monitorarFpsReal(stream);
     }
 
-    /**
-     * Monitora periodicamente o FPS real entregue pela track de vídeo,
-     * atualizando o indicador de qualidade exibido na tela.
-     */
     function monitorarFpsReal(stream) {
         if (fpsObservadoIntervalId) clearInterval(fpsObservadoIntervalId);
 
@@ -104,84 +102,87 @@
 
     /**
      * Cria uma nova RTCPeerConnection dedicada a um espectador específico,
-     * adiciona as tracks locais e envia o Offer SDP via SignalR.
+     * adiciona as tracks locais e envia o Offer SDP via Socket.io.
      */
-    async function criarPeerConnectionParaEspectador(viewerConnectionId) {
-        const pc = new RTCPeerConnection({ iceServers: montarIceServers(config) });
-        peerConnections.set(viewerConnectionId, pc);
+    async function criarPeerConnectionParaEspectador(viewerSocketId) {
+        const pc = new RTCPeerConnection({ iceServers: montarIceServers(iceConfig) });
+        peerConnections.set(viewerSocketId, pc);
 
         localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
 
         pc.onicecandidate = (event) => {
             if (event.candidate) {
-                connection.invoke('EnviarIceCandidate', viewerConnectionId, JSON.stringify(event.candidate))
-                    .catch((erro) => console.error('[WebRTC] Erro ao enviar ICE candidate:', erro));
+                connection.emit('enviarIceCandidate', {
+                    targetSocketId: viewerSocketId,
+                    candidate: event.candidate
+                });
             }
         };
 
         pc.onconnectionstatechange = () => {
-            console.info(`[WebRTC] Estado da conexão com espectador ${viewerConnectionId}: ${pc.connectionState}`);
+            console.info(`[WebRTC] Estado da conexão com espectador ${viewerSocketId}: ${pc.connectionState}`);
             if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-                peerConnections.delete(viewerConnectionId);
+                peerConnections.delete(viewerSocketId);
             }
         };
 
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
-        await connection.invoke('EnviarOffer', viewerConnectionId, JSON.stringify(offer));
+        connection.emit('enviarOffer', { targetSocketId: viewerSocketId, sdpOffer: offer });
 
         return pc;
     }
 
-    async function configurarSignalR() {
-        connection = await criarConexaoSignalR('/hubs/camera', (estado, conexaoAtual) => {
+    async function configurarSocket() {
+        iceConfig = await buscarIceConfig(config.serverUrl);
+
+        connection = criarConexaoSocket(config.serverUrl, (estado, conexaoAtual) => {
             if (estado === 'reconectando') {
                 definirStatus('Conexão perdida. Tentando reconectar automaticamente...');
             } else if (estado === 'conectado' && transmitindo) {
                 definirStatus('Reconectado. Retomando transmissão...');
-                (conexaoAtual || connection).invoke('EntrarComoBroadcaster', config.token).catch(console.error);
+                conexaoAtual.emit('entrarComoBroadcaster', config.token);
             }
         });
 
-        connection.on('BroadcasterConfirmado', () => {
+        connection.on('broadcasterConfirmado', () => {
             definirStatus('Transmissão ativa. Aguardando espectadores...');
         });
 
-        connection.on('NovoEspectador', async (viewerConnectionId) => {
+        connection.on('novoEspectador', async (viewerSocketId) => {
             try {
-                await criarPeerConnectionParaEspectador(viewerConnectionId);
+                await criarPeerConnectionParaEspectador(viewerSocketId);
             } catch (erro) {
                 console.error('[WebRTC] Erro ao conectar com espectador:', erro);
             }
         });
 
-        connection.on('ReceberAnswer', async (viewerConnectionId, sdpAnswerJson) => {
-            const pc = peerConnections.get(viewerConnectionId);
+        connection.on('receberAnswer', async ({ senderSocketId, sdpAnswer }) => {
+            const pc = peerConnections.get(senderSocketId);
             if (!pc) return;
-            const answer = JSON.parse(sdpAnswerJson);
-            await pc.setRemoteDescription(new RTCSessionDescription(answer));
+            await pc.setRemoteDescription(new RTCSessionDescription(sdpAnswer));
         });
 
-        connection.on('ReceberIceCandidate', async (viewerConnectionId, candidateJson) => {
-            const pc = peerConnections.get(viewerConnectionId);
+        connection.on('receberIceCandidate', async ({ senderSocketId, candidate }) => {
+            const pc = peerConnections.get(senderSocketId);
             if (!pc) return;
             try {
-                await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(candidateJson)));
+                await pc.addIceCandidate(new RTCIceCandidate(candidate));
             } catch (erro) {
                 console.error('[WebRTC] Erro ao adicionar ICE candidate:', erro);
             }
         });
 
-        connection.on('AtualizarContagemEspectadores', (quantidade) => {
+        connection.on('atualizarContagemEspectadores', (quantidade) => {
             atualizarContagemEspectadores(quantidade);
         });
 
-        connection.on('TransmissaoEncerrada', () => {
+        connection.on('transmissaoEncerrada', () => {
             pararTransmissao(false);
         });
 
-        connection.on('Erro', (mensagem) => {
+        connection.on('erro', (mensagem) => {
             definirStatus(`Erro: ${mensagem}`);
         });
     }
@@ -195,10 +196,10 @@
             }
 
             if (!connection) {
-                await configurarSignalR();
+                await configurarSocket();
             }
 
-            await connection.invoke('EntrarComoBroadcaster', config.token);
+            connection.emit('entrarComoBroadcaster', config.token);
 
             transmitindo = true;
             elRecIndicator.classList.remove('hidden');
@@ -218,8 +219,8 @@
     function iniciarHeartbeat() {
         if (heartbeatIntervalId) clearInterval(heartbeatIntervalId);
         heartbeatIntervalId = setInterval(() => {
-            if (connection && connection.state === signalR.HubConnectionState.Connected) {
-                connection.invoke('Heartbeat', config.token).catch(console.error);
+            if (connection && connection.connected) {
+                connection.emit('heartbeat', config.token);
             }
         }, 30000);
     }
@@ -236,11 +237,7 @@
         peerConnections.clear();
 
         if (notificarServidor && connection) {
-            try {
-                await connection.invoke('PararTransmissao', config.token);
-            } catch (erro) {
-                console.error('[Broadcaster] Erro ao notificar encerramento:', erro);
-            }
+            connection.emit('pararTransmissao', config.token);
         }
 
         if (localStream) {

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0f14" />
+    <title>Assistindo Transmissão - SecurityCam</title>
+    <link rel="stylesheet" href="/css/site.css" />
+</head>
+<body>
+    <main class="viewer-stage-fullscreen">
+        <video id="remote-video" autoplay playsinline></video>
+    </main>
+
+    <script src="/config.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const token = params.get('token');
+
+        if (!token) {
+            document.body.innerHTML = '<div class="viewer-message-screen"><h1>Link inválido</h1><p>Nenhum token de transmissão foi informado.</p></div>';
+            throw new Error('Token ausente na URL.');
+        }
+
+        window.__SECURITYCAM_CONFIG__ = {
+            token,
+            serverUrl: window.SECURITYCAM_SERVER_URL
+        };
+    </script>
+    <script src="/js/webrtc-common.js"></script>
+    <script src="/js/viewer.js"></script>
+</body>
+</html>

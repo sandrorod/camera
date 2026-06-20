@@ -1,17 +1,13 @@
-## .NET
-bin/
-obj/
-*.user
-*.suo
-.vs/
+## Node
+node_modules/
+npm-debug.log*
 
-## Banco de dados local
-*.db
-*.db-shm
-*.db-wal
+## Vercel
+.vercel
 
 ## Logs
-logs/
+*.log
 
-## Segredos
-appsettings.*.local.json
+## Variáveis de ambiente locais
+.env
+.env.local

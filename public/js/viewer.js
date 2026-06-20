@@ -1,5 +1,5 @@
 // viewer.js
-// Controla a página do espectador: conecta-se via SignalR, recebe o Offer SDP
+// Controla a página do espectador: conecta-se via Socket.io, recebe o Offer SDP
 // do transmissor, responde com Answer, troca ICE Candidates e exibe o vídeo
 // recebido via WebRTC peer-to-peer. A página não exibe nenhum texto ou indicador
 // visual — apenas o elemento <video> ocupando a tela inteira.
@@ -11,14 +11,15 @@
 
     let connection = null;
     let peerConnection = null;
-    let broadcasterConnectionId = null;
+    let broadcasterSocketId = null;
+    let iceConfig = { stunServers: [], turnServers: [] };
 
     /**
      * Cria a RTCPeerConnection do espectador. As tracks remotas recebidas são
      * conectadas diretamente ao elemento <video> para exibição em tempo real.
      */
     function criarPeerConnection() {
-        const pc = new RTCPeerConnection({ iceServers: montarIceServers(config) });
+        const pc = new RTCPeerConnection({ iceServers: montarIceServers(iceConfig) });
 
         pc.ontrack = (event) => {
             if (elRemoteVideo.srcObject !== event.streams[0]) {
@@ -27,9 +28,11 @@
         };
 
         pc.onicecandidate = (event) => {
-            if (event.candidate && broadcasterConnectionId) {
-                connection.invoke('EnviarIceCandidate', broadcasterConnectionId, JSON.stringify(event.candidate))
-                    .catch((erro) => console.error('[WebRTC] Erro ao enviar ICE candidate:', erro));
+            if (event.candidate && broadcasterSocketId) {
+                connection.emit('enviarIceCandidate', {
+                    targetSocketId: broadcasterSocketId,
+                    candidate: event.candidate
+                });
             }
         };
 
@@ -40,59 +43,60 @@
         return pc;
     }
 
-    async function configurarSignalR() {
-        connection = await criarConexaoSignalR('/hubs/camera', (estado, conexaoAtual) => {
+    async function configurarSocket() {
+        iceConfig = await buscarIceConfig(config.serverUrl);
+
+        connection = criarConexaoSocket(config.serverUrl, (estado, conexaoAtual) => {
             if (estado === 'conectado') {
                 entrarNaSessao(conexaoAtual);
             }
         });
 
-        connection.on('BroadcasterOnline', () => {
-            entrarNaSessao();
+        connection.on('broadcasterOnline', () => {
+            entrarNaSessao(connection);
         });
 
-        connection.on('ReceberOffer', async (broadcasterId, sdpOfferJson) => {
-            broadcasterConnectionId = broadcasterId;
+        connection.on('receberOffer', async ({ senderSocketId, sdpOffer }) => {
+            broadcasterSocketId = senderSocketId;
 
             if (peerConnection) {
                 peerConnection.close();
             }
             peerConnection = criarPeerConnection();
 
-            const offer = JSON.parse(sdpOfferJson);
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(sdpOffer));
 
             const answer = await peerConnection.createAnswer();
             await peerConnection.setLocalDescription(answer);
 
-            await connection.invoke('EnviarAnswer', broadcasterId, JSON.stringify(answer));
+            connection.emit('enviarAnswer', { targetSocketId: senderSocketId, sdpAnswer: answer });
         });
 
-        connection.on('ReceberIceCandidate', async (_senderId, candidateJson) => {
+        connection.on('receberIceCandidate', async ({ candidate }) => {
             if (!peerConnection) return;
             try {
-                await peerConnection.addIceCandidate(new RTCIceCandidate(JSON.parse(candidateJson)));
+                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
             } catch (erro) {
                 console.error('[WebRTC] Erro ao adicionar ICE candidate:', erro);
             }
         });
 
-        connection.on('TransmissaoEncerrada', () => {
+        connection.on('transmissaoEncerrada', () => {
             if (peerConnection) {
                 peerConnection.close();
                 peerConnection = null;
             }
         });
 
-        connection.on('Erro', (mensagem) => {
+        connection.on('erro', (mensagem) => {
             console.error('[Viewer] Erro do servidor:', mensagem);
         });
     }
 
     async function entrarNaSessao(conexaoAtual) {
         const conn = conexaoAtual || connection;
-        await conn.invoke('EntrarComoEspectador', config.token);
+        conn.emit('entrarComoEspectador', config.token);
     }
 
-    configurarSignalR();
+    configurarSocket();
 })();
