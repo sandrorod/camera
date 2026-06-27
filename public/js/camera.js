@@ -161,6 +161,41 @@
     }
 
     /**
+     * O WebRTC aplica por padrão um teto de bitrate conservador (na prática,
+     * ~1-2.5 Mbps dependendo do navegador) independente da resolução da track,
+     * o que deixa a imagem visivelmente comprimida em Full HD/4K. Define um
+     * maxBitrate proporcional à resolução real capturada para a câmera poder
+     * de fato usar a qualidade selecionada.
+     */
+    function bitrateMaximoParaResolucao(largura, altura) {
+        const pixels = largura * altura;
+        if (pixels >= 3840 * 2160) return 12_000_000; // 4K
+        if (pixels >= 1920 * 1080) return 6_000_000;  // Full HD
+        if (pixels >= 1280 * 720) return 3_000_000;   // HD
+        return 1_200_000;                              // SD
+    }
+
+    async function aplicarBitrateMaximo(pc) {
+        const trackSettings = localStream?.getVideoTracks()[0]?.getSettings() ?? {};
+        const maxBitrate = bitrateMaximoParaResolucao(trackSettings.width || 0, trackSettings.height || 0);
+
+        const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
+        if (!sender) return;
+
+        const params = sender.getParameters();
+        if (!params.encodings || params.encodings.length === 0) {
+            params.encodings = [{}];
+        }
+        params.encodings[0].maxBitrate = maxBitrate;
+
+        try {
+            await sender.setParameters(params);
+        } catch (erro) {
+            console.warn('[WebRTC] Não foi possível definir o bitrate máximo:', erro);
+        }
+    }
+
+    /**
      * Cria uma nova RTCPeerConnection dedicada a um dashboard específico,
      * adiciona as tracks locais e envia o Offer SDP via Socket.io.
      */
@@ -169,6 +204,7 @@
         peerConnections.set(dashboardSocketId, pc);
 
         localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
+        await aplicarBitrateMaximo(pc);
 
         pc.onicecandidate = (event) => {
             if (event.candidate) {
@@ -326,9 +362,10 @@
         monitorarFpsReal(stream);
 
         const novaTrack = stream.getVideoTracks()[0];
-        peerConnections.forEach((pc) => {
+        peerConnections.forEach(async (pc) => {
             const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
-            if (sender) sender.replaceTrack(novaTrack);
+            if (sender) await sender.replaceTrack(novaTrack);
+            await aplicarBitrateMaximo(pc);
         });
     }
 
