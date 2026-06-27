@@ -245,6 +245,15 @@
      * adiciona as tracks locais e envia o Offer SDP via Socket.io.
      */
     async function criarPeerConnectionParaDashboard(dashboardSocketId) {
+        // O servidor pode reenviar "novoEspectador" para o mesmo dashboard (ex:
+        // ele reconectou e a câmera ainda está marcada como ativa). Reaproveitar
+        // uma PC que já está negociando/conectada evita Offers duplicados e
+        // Answers chegando fora de ordem em PCs diferentes para o mesmo destino.
+        const pcExistente = peerConnections.get(dashboardSocketId);
+        if (pcExistente && pcExistente.connectionState !== 'failed' && pcExistente.connectionState !== 'closed') {
+            return pcExistente;
+        }
+
         const pc = new RTCPeerConnection({ iceServers: montarIceServers(iceConfig) });
         peerConnections.set(dashboardSocketId, pc);
 
@@ -309,7 +318,10 @@
 
         connection.on('receberAnswer', async ({ senderSocketId, sdpAnswer }) => {
             const pc = peerConnections.get(senderSocketId);
-            if (!pc) return;
+            // Ignora Answers que cheguem fora de ordem (ex: dashboard reenviou
+            // novoEspectador e uma nova PC já substituiu esta no Map) — aplicar
+            // um Answer quando a PC já está "stable" lança InvalidStateError.
+            if (!pc || pc.signalingState !== 'have-local-offer') return;
             await pc.setRemoteDescription(new RTCSessionDescription(sdpAnswer));
         });
 
