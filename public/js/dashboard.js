@@ -51,15 +51,35 @@
         return `${window.location.origin}/watch.html?token=${encodeURIComponent(token)}&camera=${encodeURIComponent(cameraId)}`;
     }
 
-    function copiarTexto(texto) {
-        navigator.clipboard?.writeText(texto).catch(() => {
+    function copiarTexto(texto, elBotao) {
+        const executarFallback = () => {
             const temp = document.createElement('textarea');
             temp.value = texto;
             document.body.appendChild(temp);
             temp.select();
             document.execCommand('copy');
             temp.remove();
+        };
+
+        const promessa = navigator.clipboard?.writeText(texto) ?? Promise.reject();
+        promessa.catch(executarFallback).finally(() => {
+            if (elBotao) mostrarFeedbackCopiado(elBotao);
         });
+    }
+
+    function mostrarFeedbackCopiado(elBotao) {
+        if (elBotao.dataset.feedbackAtivo) return;
+        elBotao.dataset.feedbackAtivo = '1';
+
+        const textoOriginal = elBotao.textContent;
+        elBotao.textContent = 'Copiado!';
+        elBotao.classList.add('btn-copiado');
+
+        setTimeout(() => {
+            elBotao.textContent = textoOriginal;
+            elBotao.classList.remove('btn-copiado');
+            delete elBotao.dataset.feedbackAtivo;
+        }, 1500);
     }
 
     function criarSecaoSessao(token) {
@@ -70,7 +90,7 @@
         const elBtnRemover = fragment.querySelector('.btn-remove-session');
 
         elLinkInput.value = linkCameraPara(token);
-        elBtnCopiar.addEventListener('click', () => copiarTexto(elLinkInput.value));
+        elBtnCopiar.addEventListener('click', () => copiarTexto(elLinkInput.value, elBtnCopiar));
         elBtnRemover.addEventListener('click', () => removerSessao(token));
 
         elSessionsList.appendChild(fragment);
@@ -93,7 +113,7 @@
         const elBtnCopiarCamera = fragment.querySelector('.btn-copy-camera-link');
 
         if (cameraId) {
-            elBtnCopiarCamera.addEventListener('click', () => copiarTexto(linkVisualizacaoPara(sessaoUI.token, cameraId)));
+            elBtnCopiarCamera.addEventListener('click', () => copiarTexto(linkVisualizacaoPara(sessaoUI.token, cameraId), elBtnCopiarCamera));
         } else {
             elBtnCopiarCamera.disabled = true;
         }

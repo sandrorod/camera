@@ -566,6 +566,11 @@ html, body {
     background: rgba(0, 0, 0, 0.8);
 }
 
+.btn-copiado {
+    background: var(--accent-green) !important;
+    color: #06231a !important;
+}
+
 /* ----- Lista de sessões (links gerados) ----- */
 
 .sessions-list {
