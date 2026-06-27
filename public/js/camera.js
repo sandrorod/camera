@@ -68,7 +68,12 @@
             wakeLock = await navigator.wakeLock.request('screen');
             console.info('[WakeLock] Adquirido com sucesso.');
             wakeLock.addEventListener('release', () => {
+                // Sem isso, a variável continua apontando pra um lock já
+                // inválido e o polling de readquisição nunca dispara de novo —
+                // causa raiz da tela apagar permanentemente após a primeira
+                // liberação automática pelo sistema.
                 console.info('[WakeLock] Liberado pelo sistema.');
+                wakeLock = null;
             });
         } catch (erro) {
             console.warn('[WakeLock] Falha ao adquirir:', erro.name, erro.message);
@@ -85,18 +90,31 @@
 
     /**
      * Alguns fabricantes (Samsung, Xiaomi etc) liberam o Wake Lock mesmo com a
-     * aba em foco, fora do ciclo de vida documentado pela API. Verifica
-     * periodicamente e readquire se necessário, como camada extra de defesa
-     * além do listener de visibilitychange.
+     * aba em foco, fora do ciclo de vida documentado pela API, ou nunca chegam
+     * a conceder o lock por gerenciamento agressivo de energia. Verifica com
+     * frequência e readquire em todo gatilho disponível de retorno de foco,
+     * como camada extra de defesa além do listener de visibilitychange.
      */
     setInterval(() => {
         if (transmitindo && !wakeLock) {
             adquirirWakeLock();
         }
-    }, 15000);
+    }, 5000);
 
     document.addEventListener('visibilitychange', () => {
         if (transmitindo && document.visibilityState === 'visible' && !wakeLock) {
+            adquirirWakeLock();
+        }
+    });
+
+    window.addEventListener('focus', () => {
+        if (transmitindo && !wakeLock) {
+            adquirirWakeLock();
+        }
+    });
+
+    window.addEventListener('pageshow', () => {
+        if (transmitindo && !wakeLock) {
             adquirirWakeLock();
         }
     });
