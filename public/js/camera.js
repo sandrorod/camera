@@ -159,22 +159,28 @@
             fpsReal
         );
 
-        notificarOrientacaoSeMudou(trackSettings.width, trackSettings.height);
+        notificarOrientacaoSeMudou();
         monitorarFpsReal(stream);
     }
 
     /**
-     * A proporção real da track de vídeo (não a resolução nominal selecionada)
-     * já reflete a orientação física do celular — sensores móveis ajustam
-     * width/height automaticamente ao girar o aparelho. Avisa o dashboard e
-     * observadores sempre que a orientação detectada mudar, para que ajustem
-     * o aspect-ratio do vídeo exibido (retrato vs paisagem) em vez de cortar
-     * ou distorcer a imagem.
+     * A resolução da track de vídeo (width/height) NÃO reflete a orientação
+     * física do celular — o sensor da câmera captura sempre na mesma
+     * orientação nativa (geralmente paisagem), e é a rotação do dispositivo
+     * que gira a imagem na exibição via metadata, não a resolução em si. Por
+     * isso a orientação real precisa vir de screen.orientation (ou da media
+     * query de fallback), que reflete a posição física do aparelho.
      */
+    function celularEstaVertical() {
+        if (screen.orientation?.type) {
+            return screen.orientation.type.startsWith('portrait');
+        }
+        return window.matchMedia('(orientation: portrait)').matches;
+    }
+
     let orientacaoAtual = null;
-    function notificarOrientacaoSeMudou(width, height) {
-        if (!width || !height) return;
-        const vertical = height > width;
+    function notificarOrientacaoSeMudou() {
+        const vertical = celularEstaVertical();
         if (orientacaoAtual === vertical) return;
         orientacaoAtual = vertical;
 
@@ -182,6 +188,9 @@
             connection.emit('orientacaoAtualizada', { token: config.token, vertical });
         }
     }
+
+    screen.orientation?.addEventListener('change', notificarOrientacaoSeMudou);
+    window.addEventListener('orientationchange', notificarOrientacaoSeMudou);
 
     function monitorarFpsReal(stream) {
         if (fpsObservadoIntervalId) clearInterval(fpsObservadoIntervalId);
@@ -196,7 +205,6 @@
             if (settings.frameRate) {
                 elFpsLabel.textContent = `${Math.round(settings.frameRate)} fps`;
             }
-            notificarOrientacaoSeMudou(settings.width, settings.height);
         }, 3000);
     }
 
@@ -299,11 +307,8 @@
 
             // Garante que a orientação inicial seja enviada agora que a conexão existe
             // (na primeira captura, a conexão ainda não tinha sido criada).
-            const settings = localStream?.getVideoTracks()[0]?.getSettings() ?? {};
-            if (settings.width && settings.height) {
-                orientacaoAtual = null;
-                notificarOrientacaoSeMudou(settings.width, settings.height);
-            }
+            orientacaoAtual = null;
+            notificarOrientacaoSeMudou();
         });
 
         connection.on('novoEspectador', async (dashboardSocketId) => {
