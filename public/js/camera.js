@@ -203,21 +203,19 @@
     /**
      * O WebRTC aplica por padrão um teto de bitrate conservador (~1-2.5 Mbps)
      * independente da resolução da track, deixando a imagem comprimida em
-     * Full HD/4K. Porém setar um teto muito acima do upload real do celular
-     * (ex: 12 Mbps em 4G/Wi-Fi doméstico, que raramente sustenta isso) faz o
-     * encoder mirar um bitrate inalcançável, causando congestionamento, perda
-     * de pacotes e travamentos — pior que a compressão original. Os valores
-     * abaixo são um meio-termo: acima do teto padrão para melhorar a nitidez,
-     * mas dentro do que uploads móveis/residenciais comuns sustentam. O
-     * controle de congestionamento do WebRTC (GCC) ainda reduz dinamicamente
-     * abaixo deste teto se a rede não suportar.
+     * Full HD/4K. O travamento observado anteriormente não era causado pelo
+     * bitrate alto em si, e sim por um bug de Wake Lock (tela apagava e a
+     * captura pausava) e por uma race condition no WebRTC — ambos corrigidos.
+     * Com a causa raiz resolvida, o teto pode ser mais generoso; o controle de
+     * congestionamento do WebRTC (GCC) ainda reduz dinamicamente abaixo deste
+     * valor se a rede real não sustentar.
      */
     function bitrateMaximoParaResolucao(largura, altura) {
         const pixels = largura * altura;
-        if (pixels >= 3840 * 2160) return 4_000_000;  // 4K
-        if (pixels >= 1920 * 1080) return 2_500_000;  // Full HD
-        if (pixels >= 1280 * 720) return 1_500_000;   // HD
-        return 800_000;                                // SD
+        if (pixels >= 3840 * 2160) return 12_000_000;  // 4K
+        if (pixels >= 1920 * 1080) return 6_000_000;   // Full HD
+        if (pixels >= 1280 * 720) return 3_000_000;    // HD
+        return 1_200_000;                               // SD
     }
 
     async function aplicarBitrateMaximo(pc) {
