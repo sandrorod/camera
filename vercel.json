@@ -1,5 +1,5 @@
 {
   "framework": null,
   "outputDirectory": "public",
-  "cleanUrls": true
+  "cleanUrls": false
 }

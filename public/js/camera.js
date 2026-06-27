@@ -1,9 +1,27 @@
-// broadcaster.js
-// Controla a página do transmissor: captura de câmera/microfone, preview local,
-// criação de uma RTCPeerConnection por espectador conectado, e signaling via Socket.io.
+// camera.js
+// Controla a página da câmera: captura de câmera/microfone, preview local,
+// criação de uma RTCPeerConnection com o dashboard que está assistindo, e
+// signaling via Socket.io.
 
 (function () {
     const config = window.__SECURITYCAM_CONFIG__;
+
+    /**
+     * cameraId persistente: gerado uma vez e salvo no localStorage deste dispositivo/
+     * navegador. Sobrevive a reloads e reconexões, permitindo que o link de
+     * visualização individual (watch.html) continue válido mesmo que o socketId mude.
+     * É por sessão (token), já que o mesmo celular pode usar links diferentes.
+     */
+    function obterCameraId(token) {
+        const chave = `securitycam_camera_id_${token}`;
+        let cameraId = localStorage.getItem(chave);
+        if (!cameraId) {
+            cameraId = crypto.randomUUID();
+            localStorage.setItem(chave, cameraId);
+        }
+        return cameraId;
+    }
+    const cameraId = obterCameraId(config.token);
 
     const elLocalPreview = document.getElementById('local-preview');
     const elConnectionOverlay = document.getElementById('connection-overlay');
@@ -11,23 +29,16 @@
     const elBtnStart = document.getElementById('btn-start');
     const elBtnStop = document.getElementById('btn-stop');
     const elBtnSwitchCamera = document.getElementById('btn-switch-camera');
-    const elBtnShare = document.getElementById('btn-share');
-    const elShareBox = document.getElementById('share-box');
-    const elShareLinkInput = document.getElementById('share-link-input');
-    const elBtnCopyLink = document.getElementById('btn-copy-link');
     const elSelectResolution = document.getElementById('select-resolution');
     const elSelectFps = document.getElementById('select-fps');
     const elQualityLabel = document.getElementById('quality-label');
     const elFpsLabel = document.getElementById('fps-label');
-    const elViewerCountValue = document.getElementById('viewer-count-value');
     const elStatusMessage = document.getElementById('status-message');
-
-    elShareLinkInput.value = config.viewerShareUrl;
 
     /** @type {MediaStream|null} */
     let localStream = null;
 
-    /** Mapa de RTCPeerConnection por socketId de espectador. */
+    /** Mapa de RTCPeerConnection por socketId do dashboard. Hoje só há 1 dashboard por sessão, mas o mapa suporta múltiplos. */
     const peerConnections = new Map();
 
     let iceConfig = { stunServers: [], turnServers: [] };
@@ -99,10 +110,6 @@
         elFpsLabel.textContent = `${fps} fps`;
     }
 
-    function atualizarContagemEspectadores(quantidade) {
-        elViewerCountValue.textContent = String(quantidade);
-    }
-
     /**
      * Solicita permissão de câmera/microfone e inicia o preview local,
      * tentando a maior resolução suportada a partir da seleção do usuário.
@@ -154,35 +161,35 @@
     }
 
     /**
-     * Cria uma nova RTCPeerConnection dedicada a um espectador específico,
+     * Cria uma nova RTCPeerConnection dedicada a um dashboard específico,
      * adiciona as tracks locais e envia o Offer SDP via Socket.io.
      */
-    async function criarPeerConnectionParaEspectador(viewerSocketId) {
+    async function criarPeerConnectionParaDashboard(dashboardSocketId) {
         const pc = new RTCPeerConnection({ iceServers: montarIceServers(iceConfig) });
-        peerConnections.set(viewerSocketId, pc);
+        peerConnections.set(dashboardSocketId, pc);
 
         localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
 
         pc.onicecandidate = (event) => {
             if (event.candidate) {
                 connection.emit('enviarIceCandidate', {
-                    targetSocketId: viewerSocketId,
+                    targetSocketId: dashboardSocketId,
                     candidate: event.candidate
                 });
             }
         };
 
         pc.onconnectionstatechange = () => {
-            console.info(`[WebRTC] Estado da conexão com espectador ${viewerSocketId}: ${pc.connectionState}`);
+            console.info(`[WebRTC] Estado da conexão com dashboard ${dashboardSocketId}: ${pc.connectionState}`);
             if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-                peerConnections.delete(viewerSocketId);
+                peerConnections.delete(dashboardSocketId);
             }
         };
 
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
-        connection.emit('enviarOffer', { targetSocketId: viewerSocketId, sdpOffer: offer });
+        connection.emit('enviarOffer', { targetSocketId: dashboardSocketId, sdpOffer: offer });
 
         return pc;
     }
@@ -195,19 +202,19 @@
                 definirStatus('Conexão perdida. Tentando reconectar automaticamente...');
             } else if (estado === 'conectado' && transmitindo) {
                 definirStatus('Reconectado. Retomando transmissão...');
-                conexaoAtual.emit('entrarComoBroadcaster', config.token);
+                conexaoAtual.emit('entrarComoCamera', { token: config.token, cameraId });
             }
         });
 
-        connection.on('broadcasterConfirmado', () => {
-            definirStatus('Transmissão ativa. Aguardando espectadores...');
+        connection.on('cameraConfirmada', () => {
+            definirStatus('Transmissão ativa. Aguardando conexão com o dashboard...');
         });
 
-        connection.on('novoEspectador', async (viewerSocketId) => {
+        connection.on('novoEspectador', async (dashboardSocketId) => {
             try {
-                await criarPeerConnectionParaEspectador(viewerSocketId);
+                await criarPeerConnectionParaDashboard(dashboardSocketId);
             } catch (erro) {
-                console.error('[WebRTC] Erro ao conectar com espectador:', erro);
+                console.error('[WebRTC] Erro ao conectar com o dashboard:', erro);
             }
         });
 
@@ -227,14 +234,6 @@
             }
         });
 
-        connection.on('atualizarContagemEspectadores', (quantidade) => {
-            atualizarContagemEspectadores(quantidade);
-        });
-
-        connection.on('transmissaoEncerrada', () => {
-            pararTransmissao(false);
-        });
-
         connection.on('erro', (mensagem) => {
             definirStatus(`Erro: ${mensagem}`);
         });
@@ -252,19 +251,18 @@
                 await configurarSocket();
             }
 
-            connection.emit('entrarComoBroadcaster', config.token);
+            connection.emit('entrarComoCamera', { token: config.token, cameraId });
 
             transmitindo = true;
             elRecIndicator.classList.remove('hidden');
             elBtnStart.classList.add('hidden');
             elBtnStop.classList.remove('hidden');
-            elBtnShare.classList.remove('hidden');
-            definirStatus('Transmissão iniciada. Compartilhe o link para que outras pessoas assistam.');
+            definirStatus('Transmissão iniciada. A câmera já aparece no dashboard.');
 
             iniciarHeartbeat();
             await adquirirWakeLock();
         } catch (erro) {
-            console.error('[Broadcaster] Erro ao iniciar transmissão:', erro);
+            console.error('[Câmera] Erro ao iniciar transmissão:', erro);
             definirStatus(`Não foi possível acessar a câmera: ${erro.message}`);
             elBtnStart.disabled = false;
         }
@@ -304,8 +302,6 @@
         elBtnStart.classList.remove('hidden');
         elBtnStart.disabled = false;
         elBtnStop.classList.add('hidden');
-        elBtnShare.classList.add('hidden');
-        elShareBox.classList.add('hidden');
         definirStatus('Transmissão encerrada.');
     }
 
@@ -336,33 +332,9 @@
         });
     }
 
-    function copiarLink() {
-        elShareLinkInput.select();
-        navigator.clipboard?.writeText(elShareLinkInput.value).then(() => {
-            definirStatus('Link copiado para a área de transferência.');
-        }).catch(() => {
-            document.execCommand('copy');
-        });
-    }
-
-    function abrirCompartilhamento() {
-        elShareBox.classList.toggle('hidden');
-
-        if (navigator.share) {
-            navigator.share({
-                title: 'Assista à transmissão em tempo real',
-                url: config.viewerShareUrl
-            }).catch(() => {
-                // usuário cancelou o compartilhamento nativo; o link continua visível na share-box
-            });
-        }
-    }
-
     elBtnStart.addEventListener('click', iniciarTransmissao);
     elBtnStop.addEventListener('click', () => pararTransmissao(true));
     elBtnSwitchCamera.addEventListener('click', alternarCamera);
-    elBtnShare.addEventListener('click', abrirCompartilhamento);
-    elBtnCopyLink.addEventListener('click', copiarLink);
 
     window.addEventListener('beforeunload', () => {
         if (transmitindo) {

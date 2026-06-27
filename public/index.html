@@ -4,49 +4,68 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#0b0f14" />
-    <title>SecurityCam</title>
+    <title>SecurityCam - Dashboard</title>
     <link rel="stylesheet" href="/css/site.css" />
 </head>
 <body>
-    <div class="page page-home">
-        <div class="home-card">
-            <div class="home-logo">
+    <div class="page page-dashboard">
+        <header class="topbar">
+            <div class="topbar-left">
                 <span class="rec-dot"></span>
-                <h1>SecurityCam</h1>
+                <h1 class="dashboard-title">SecurityCam</h1>
             </div>
-            <p class="home-subtitle">Transforme seu celular em uma câmera de segurança acessível pela internet.</p>
+        </header>
 
-            <form id="form-criar" class="home-form">
+        <section class="share-section">
+            <form id="form-criar" class="share-form">
                 <label class="field">
                     <span>Expiração do link (opcional, em minutos)</span>
                     <input type="number" id="input-expiracao" min="1" placeholder="Ex: 120 (sem expiração se vazio)" />
                 </label>
 
-                <button type="submit" class="btn btn-primary btn-large">
-                    Iniciar Nova Transmissão
-                </button>
+                <button type="submit" class="btn btn-primary">+ Gerar Link</button>
             </form>
+        </section>
 
-            <p class="home-hint">Abra esta página no celular que será usado como câmera.</p>
-        </div>
+        <main class="dashboard-main">
+            <div id="empty-state" class="empty-state">
+                <p>Nenhum link gerado ainda.</p>
+                <p class="empty-state-hint">Clique em "+ Gerar Link" para criar um link compartilhável e começar a receber câmeras.</p>
+            </div>
+            <div id="sessions-list" class="sessions-list"></div>
+        </main>
     </div>
 
+    <template id="template-session">
+        <section class="session-card">
+            <div class="session-header">
+                <div class="share-link-row">
+                    <input class="session-link-input" type="text" readonly />
+                    <button class="btn btn-secondary btn-small btn-copy-session-link">Copiar</button>
+                </div>
+                <button class="btn btn-danger btn-small btn-remove-session">Remover</button>
+            </div>
+            <div class="session-empty-state">Nenhuma câmera conectada a este link ainda.</div>
+            <div class="cameras-grid"></div>
+        </section>
+    </template>
+
+    <template id="template-camera-card">
+        <div class="camera-card">
+            <video autoplay playsinline muted></video>
+            <span class="camera-card-label">Conectando...</span>
+            <button class="btn-copy-camera-link" title="Copiar link desta câmera">Copiar link</button>
+        </div>
+    </template>
+
     <script src="/config.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script>
-        document.getElementById('form-criar').addEventListener('submit', async (event) => {
-            event.preventDefault();
-
-            const expiracaoMinutos = document.getElementById('input-expiracao').value || null;
-
-            const resposta = await fetch(`${window.SECURITYCAM_SERVER_URL}/api/sessions`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ expiracaoMinutos: expiracaoMinutos ? Number(expiracaoMinutos) : null })
-            });
-
-            const dados = await resposta.json();
-            window.location.href = `/broadcaster.html?token=${encodeURIComponent(dados.token)}`;
-        });
+        window.__SECURITYCAM_CONFIG__ = {
+            serverUrl: window.SECURITYCAM_SERVER_URL
+        };
     </script>
+    <script src="/js/webrtc-common.js"></script>
+    <script src="/js/dashboard.js"></script>
 </body>
 </html>

@@ -4,12 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#0b0f14" />
-    <title>Assistindo Transmissão - SecurityCam</title>
+    <title>Assistindo Câmera - SecurityCam</title>
     <link rel="stylesheet" href="/css/site.css" />
 </head>
 <body>
     <main class="viewer-stage-fullscreen">
         <video id="remote-video" autoplay playsinline></video>
+        <div id="connection-overlay" class="connection-overlay">
+            <p>Conectando à câmera...</p>
+        </div>
     </main>
 
     <script src="/config.js"></script>
@@ -17,18 +20,20 @@
     <script>
         const params = new URLSearchParams(window.location.search);
         const token = params.get('token');
+        const cameraId = params.get('camera');
 
-        if (!token) {
-            document.body.innerHTML = '<div class="viewer-message-screen"><h1>Link inválido</h1><p>Nenhum token de transmissão foi informado.</p></div>';
-            throw new Error('Token ausente na URL.');
+        if (!token || !cameraId) {
+            document.body.innerHTML = '<div class="viewer-message-screen"><h1>Link inválido</h1><p>Este link não identifica uma câmera válida.</p></div>';
+            throw new Error('Token ou cameraId ausente na URL.');
         }
 
         window.__SECURITYCAM_CONFIG__ = {
             token,
+            cameraId,
             serverUrl: window.SECURITYCAM_SERVER_URL
         };
     </script>
     <script src="/js/webrtc-common.js"></script>
-    <script src="/js/viewer.js"></script>
+    <script src="/js/watch.js"></script>
 </body>
 </html>

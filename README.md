@@ -1,7 +1,8 @@
 # SecurityCam
 
-Aplicação que transforma um smartphone em uma câmera de segurança acessível pela
-internet via link compartilhável, usando WebRTC para vídeo em tempo real.
+Dashboard que mostra, em tempo real, o vídeo de todas as câmeras (smartphones) que
+se conectaram através de um único link compartilhável, usando WebRTC para vídeo
+em tempo real.
 
 ## Arquitetura
 
@@ -16,19 +17,22 @@ persistente — necessário para o signaling do WebRTC.
 
 ### Fluxo de funcionamento
 
-1. Usuário acessa `index.html` e clica em "Iniciar Nova Transmissão" — isso chama
-   `POST /api/sessions` no servidor de signaling, que gera um token aleatório.
-2. É redirecionado para `broadcaster.html?token=...` — a página solicita permissão
-   de câmera e conecta ao servidor via Socket.io.
-3. Ao clicar em "Iniciar Transmissão", a câmera traseira é ativada e o transmissor
-   entra na "sala" da sessão (`entrarComoBroadcaster`).
-4. Ao clicar em "Compartilhar", o link `viewer.html?token=...` é exibido/copiado.
-5. Cada espectador que abre esse link entra na mesma sala; o transmissor recebe
-   `novoEspectador` e cria uma `RTCPeerConnection` dedicada, enviando um SDP Offer.
-6. O espectador responde com SDP Answer; ambos trocam ICE Candidates via Socket.io
+1. Usuário acessa `index.html` (o dashboard) e clica em "+ Gerar Link" — isso chama
+   `POST /api/sessions` no servidor de signaling, que gera um token aleatório e
+   conecta o dashboard à sessão (`entrarComoDashboard`).
+2. O link gerado (`camera.html?token=...`) é exibido para cópia/compartilhamento.
+   Envie-o para cada celular que será usado como câmera, via WhatsApp/QR Code.
+3. Cada celular que abre o link e clica em "Iniciar Transmissão" entra na mesma
+   sessão (`entrarComoCamera`) e a câmera traseira é ativada.
+4. O dashboard recebe `novaCameraConectada` e a câmera recebe o aviso para criar
+   uma `RTCPeerConnection` dedicada, enviando um SDP Offer ao dashboard.
+5. O dashboard responde com SDP Answer; ambos trocam ICE Candidates via Socket.io
    até a conexão peer-to-peer ser estabelecida.
-7. Vídeo flui diretamente entre os pares (P2P) usando STUN para resolução de NAT,
-   com fallback para TURN quando configurado.
+6. Vídeo flui diretamente entre os pares (P2P) usando STUN para resolução de NAT,
+   com fallback para TURN quando configurado. Cada câmera aparece automaticamente
+   como um card no grid do dashboard, e desaparece ao desconectar.
+7. O link aceita um número ilimitado de câmeras simultâneas — todas aparecem no
+   mesmo dashboard.
 
 ## Executando localmente
 

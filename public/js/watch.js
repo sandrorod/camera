@@ -1,18 +1,28 @@
-// viewer.js
-// Controla a página do espectador: conecta-se via Socket.io, recebe o Offer SDP
-// do transmissor, responde com Answer, troca ICE Candidates e exibe o vídeo
-// recebido via WebRTC peer-to-peer. A página não exibe nenhum texto ou indicador
-// visual — apenas o elemento <video> ocupando a tela inteira.
+// watch.js
+// Controla a página de visualização individual: conecta-se via Socket.io como
+// observador de UMA câmera específica (identificada por cameraId, estável entre
+// reconexões), recebe o Offer SDP dela, responde com Answer, troca ICE Candidates
+// e exibe o vídeo recebido via WebRTC em tela cheia, sem nenhum outro elemento de UI.
 
 (function () {
     const config = window.__SECURITYCAM_CONFIG__;
 
     const elRemoteVideo = document.getElementById('remote-video');
+    const elConnectionOverlay = document.getElementById('connection-overlay');
 
     let connection = null;
     let peerConnection = null;
-    let broadcasterSocketId = null;
+    let cameraSocketId = null;
     let iceConfig = { stunServers: [], turnServers: [] };
+
+    function definirOverlay(mensagem) {
+        if (mensagem) {
+            elConnectionOverlay.querySelector('p').textContent = mensagem;
+            elConnectionOverlay.classList.remove('hidden');
+        } else {
+            elConnectionOverlay.classList.add('hidden');
+        }
+    }
 
     /**
      * Navegadores bloqueiam autoplay de vídeo com áudio sem interação prévia
@@ -35,31 +45,28 @@
         });
     }
 
-    /**
-     * Cria a RTCPeerConnection do espectador. As tracks remotas recebidas são
-     * conectadas diretamente ao elemento <video> para exibição em tempo real.
-     */
     function criarPeerConnection() {
         const pc = new RTCPeerConnection({ iceServers: montarIceServers(iceConfig) });
 
         pc.ontrack = (event) => {
             if (elRemoteVideo.srcObject !== event.streams[0]) {
                 elRemoteVideo.srcObject = event.streams[0];
+                definirOverlay(null);
                 tentarReproduzirComAudio();
             }
         };
 
         pc.onicecandidate = (event) => {
-            if (event.candidate && broadcasterSocketId) {
+            if (event.candidate && cameraSocketId) {
                 connection.emit('enviarIceCandidate', {
-                    targetSocketId: broadcasterSocketId,
+                    targetSocketId: cameraSocketId,
                     candidate: event.candidate
                 });
             }
         };
 
         pc.onconnectionstatechange = () => {
-            console.info('[WebRTC] Estado da conexão com o transmissor:', pc.connectionState);
+            console.info('[WebRTC] Estado da conexão com a câmera:', pc.connectionState);
         };
 
         return pc;
@@ -70,16 +77,14 @@
 
         connection = criarConexaoSocket(config.serverUrl, (estado, conexaoAtual) => {
             if (estado === 'conectado') {
-                entrarNaSessao(conexaoAtual);
+                entrarComoObservador(conexaoAtual);
+            } else if (estado === 'reconectando') {
+                definirOverlay('Conexão perdida. Tentando reconectar...');
             }
         });
 
-        connection.on('broadcasterOnline', () => {
-            entrarNaSessao(connection);
-        });
-
         connection.on('receberOffer', async ({ senderSocketId, sdpOffer }) => {
-            broadcasterSocketId = senderSocketId;
+            cameraSocketId = senderSocketId;
 
             if (peerConnection) {
                 peerConnection.close();
@@ -103,21 +108,25 @@
             }
         });
 
-        connection.on('transmissaoEncerrada', () => {
+        connection.on('cameraDesconectada', ({ cameraId }) => {
+            if (cameraId !== config.cameraId) return;
             if (peerConnection) {
                 peerConnection.close();
                 peerConnection = null;
             }
+            elRemoteVideo.srcObject = null;
+            definirOverlay('A câmera foi desconectada.');
         });
 
         connection.on('erro', (mensagem) => {
-            console.error('[Viewer] Erro do servidor:', mensagem);
+            console.error('[Watch] Erro do servidor:', mensagem);
+            definirOverlay(mensagem);
         });
     }
 
-    async function entrarNaSessao(conexaoAtual) {
+    function entrarComoObservador(conexaoAtual) {
         const conn = conexaoAtual || connection;
-        conn.emit('entrarComoEspectador', config.token);
+        conn.emit('entrarComoObservador', { token: config.token, cameraId: config.cameraId });
     }
 
     configurarSocket();

@@ -1,6 +1,6 @@
 // index.js
 // Servidor de signaling WebRTC do SecurityCam: API REST para criar/consultar sessões
-// e Socket.io para a troca de Offer/Answer/ICE entre transmissor e espectadores.
+// e Socket.io para a troca de Offer/Answer/ICE entre câmeras e o dashboard que as assiste.
 // O frontend estático (HTML/CSS/JS) é hospedado separadamente na Vercel; este
 // servidor só cuida da negociação da conexão peer-to-peer, nunca do vídeo em si.
 
@@ -75,7 +75,7 @@ app.get('/api/sessions/:token/status', (req, res) => {
         token: sessao.token,
         ativa: sessao.ativa,
         expirada: sessionStore.sessaoExpirada(sessao),
-        quantidadeEspectadores: sessao.espectadores.size,
+        quantidadeCameras: sessao.cameras.size,
         ultimaAtividade: sessao.ultimaAtividade
     });
 });
@@ -87,43 +87,74 @@ app.get('/api/ice-config', (_req, res) => {
 // ----- Socket.io (signaling) -----
 
 io.on('connection', (socket) => {
-    socket.on('entrarComoBroadcaster', (token) => {
-        const sessao = sessionStore.obterSessao(token);
-
-        if (!sessao || !sessao.ativa) {
-            socket.emit('erro', 'Sessão inválida ou inativa.');
-            return;
-        }
-
-        socket.join(grupoSessao(token));
-        sessionStore.definirBroadcaster(token, socket.id);
-
-        console.log(`[Broadcaster conectado] token=${token} socketId=${socket.id}`);
-
-        socket.emit('broadcasterConfirmado', token);
-        io.to(grupoSessao(token)).emit('broadcasterOnline');
-    });
-
-    socket.on('entrarComoEspectador', (token) => {
+    socket.on('entrarComoCamera', ({ token, cameraId }) => {
         const sessao = sessionStore.obterSessao(token);
 
         if (!sessao || !sessao.ativa || sessionStore.sessaoExpirada(sessao)) {
-            socket.emit('erro', 'Transmissão não encontrada, encerrada ou expirada.');
+            socket.emit('erro', 'Sessão inválida, encerrada ou expirada.');
             return;
         }
 
         socket.join(grupoSessao(token));
-        sessionStore.adicionarEspectador(token, socket.id);
+        socket.cameraId = cameraId;
+        sessionStore.adicionarCamera(token, cameraId, socket.id);
 
-        console.log(`[Espectador conectado] token=${token} socketId=${socket.id}`);
+        console.log(`[Câmera conectada] token=${token} cameraId=${cameraId} socketId=${socket.id}`);
 
-        if (sessao.broadcasterSocketId) {
-            io.to(sessao.broadcasterSocketId).emit('novoEspectador', socket.id);
-        } else {
-            socket.emit('broadcasterOffline');
+        socket.emit('cameraConfirmada', token);
+
+        // Avisa cada dashboard já conectado para que crie um card, e pede à própria
+        // câmera que envie o Offer a cada um deles — a câmera é quem inicia o Offer
+        // (papel mantido do antigo broadcaster, só troca o destinatário de
+        // "espectador" para "dashboard").
+        sessionStore.listarDashboards(token).forEach((dashboardSocketId) => {
+            io.to(dashboardSocketId).emit('novaCameraConectada', { socketId: socket.id, cameraId });
+            socket.emit('novoEspectador', dashboardSocketId);
+        });
+    });
+
+    socket.on('entrarComoObservador', ({ token, cameraId }) => {
+        const sessao = sessionStore.obterSessao(token);
+
+        if (!sessao || !sessao.ativa || sessionStore.sessaoExpirada(sessao)) {
+            socket.emit('erro', 'Sessão não encontrada, encerrada ou expirada.');
+            return;
         }
 
-        io.to(grupoSessao(token)).emit('atualizarContagemEspectadores', sessao.espectadores.size);
+        const camera = sessionStore.obterCameraPorCameraId(token, cameraId);
+        if (!camera) {
+            socket.emit('erro', 'Esta câmera não está conectada no momento.');
+            return;
+        }
+
+        socket.join(grupoSessao(token));
+        console.log(`[Observador conectado] token=${token} cameraId=${cameraId} socketId=${socket.id}`);
+
+        // Pede à câmera específica que envie o Offer a este observador.
+        io.to(camera.socketId).emit('novoEspectador', socket.id);
+    });
+
+    socket.on('entrarComoDashboard', (token) => {
+        const sessao = sessionStore.obterSessao(token);
+
+        if (!sessao || !sessao.ativa || sessionStore.sessaoExpirada(sessao)) {
+            socket.emit('erro', 'Sessão não encontrada, encerrada ou expirada.');
+            return;
+        }
+
+        socket.join(grupoSessao(token));
+        sessionStore.adicionarDashboard(token, socket.id);
+
+        const camerasAtivas = sessionStore.listarCameras(token);
+        console.log(`[Dashboard conectado] token=${token} socketId=${socket.id} cameras=${camerasAtivas.length}`);
+
+        // Informa as câmeras já online (para reconstruir os cards e seus links de
+        // visualização) e pede a cada uma que (re)envie Offer a este dashboard —
+        // cobre o caso de o dashboard ter recarregado a página com câmeras já ativas.
+        camerasAtivas.forEach((cam) => {
+            socket.emit('novaCameraConectada', { socketId: cam.socketId, cameraId: cam.cameraId });
+            io.to(cam.socketId).emit('novoEspectador', socket.id);
+        });
     });
 
     socket.on('enviarOffer', ({ targetSocketId, sdpOffer }) => {
@@ -143,27 +174,23 @@ io.on('connection', (socket) => {
     });
 
     socket.on('pararTransmissao', (token) => {
-        sessionStore.encerrarSessao(token);
-        io.to(grupoSessao(token)).emit('transmissaoEncerrada');
+        const sessao = sessionStore.removerCameraPorSocketId(socket.id);
+        if (sessao) {
+            io.to(grupoSessao(sessao.token)).emit('cameraDesconectada', { socketId: socket.id, cameraId: socket.cameraId });
+        }
         socket.leave(grupoSessao(token));
     });
 
     socket.on('disconnect', () => {
-        const sessaoComoBroadcaster = sessionStore.removerBroadcasterPorSocketId(socket.id);
+        const sessaoComoCamera = sessionStore.removerCameraPorSocketId(socket.id);
 
-        if (sessaoComoBroadcaster) {
-            io.to(grupoSessao(sessaoComoBroadcaster.token)).emit('broadcasterOffline');
-            console.log(`[Broadcaster desconectado] token=${sessaoComoBroadcaster.token}`);
+        if (sessaoComoCamera) {
+            io.to(grupoSessao(sessaoComoCamera.token)).emit('cameraDesconectada', { socketId: socket.id, cameraId: socket.cameraId });
+            console.log(`[Câmera desconectada] token=${sessaoComoCamera.token} cameraId=${socket.cameraId} socketId=${socket.id}`);
             return;
         }
 
-        const sessaoComoEspectador = sessionStore.removerEspectadorPorSocketId(socket.id);
-        if (sessaoComoEspectador) {
-            io.to(grupoSessao(sessaoComoEspectador.token)).emit(
-                'atualizarContagemEspectadores',
-                sessaoComoEspectador.espectadores.size
-            );
-        }
+        sessionStore.removerDashboardPorSocketId(socket.id);
     });
 });
 
