@@ -214,9 +214,6 @@
             params.encodings = [{}];
         }
         params.encodings[0].maxBitrate = maxBitrate;
-        // Prioriza manter o frame rate fluido (sem travar) em vez de preservar
-        // resolução quando a rede/CPU não acompanha o bitrate configurado.
-        params.degradationPreference = 'maintain-framerate';
 
         try {
             await sender.setParameters(params);
