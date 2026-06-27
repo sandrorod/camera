@@ -4,12 +4,15 @@
 // O frontend estático (HTML/CSS/JS) é hospedado separadamente na Vercel; este
 // servidor só cuida da negociação da conexão peer-to-peer, nunca do vídeo em si.
 
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
 
 const sessionStore = require('./sessionStore');
+const db = require('./db');
 
 const PORT = process.env.PORT || 4000;
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '*')
@@ -49,6 +52,13 @@ function grupoSessao(token) {
     return `session-${token}`;
 }
 
+function notificarContagemObservadores(token, cameraId) {
+    const quantidade = sessionStore.contarObservadores(token, cameraId);
+    sessionStore.listarDashboards(token).forEach((dashboardSocketId) => {
+        io.to(dashboardSocketId).emit('contagemObservadoresAtualizada', { cameraId, quantidade });
+    });
+}
+
 // ----- API REST -----
 
 app.get('/health', (_req, res) => {
@@ -63,6 +73,17 @@ app.post('/api/sessions', (req, res) => {
         token: sessao.token,
         iceServers: { stunServers: STUN_SERVERS, turnServers: TURN_SERVERS }
     });
+});
+
+app.get('/api/sessions', async (_req, res) => {
+    const tokens = await db.listarTokensDeSessao();
+    res.json({ tokens });
+});
+
+app.delete('/api/sessions/:token', async (req, res) => {
+    await db.removerCamerasPorSessao(req.params.token);
+    sessionStore.encerrarSessao(req.params.token);
+    res.json({ ok: true });
 });
 
 app.get('/api/sessions/:token/status', (req, res) => {
@@ -98,6 +119,7 @@ io.on('connection', (socket) => {
         socket.join(grupoSessao(token));
         socket.cameraId = cameraId;
         sessionStore.adicionarCamera(token, cameraId, socket.id);
+        db.registrarCamera(token, cameraId, null).catch((erro) => console.error('[db] Falha ao registrar câmera:', erro));
 
         console.log(`[Câmera conectada] token=${token} cameraId=${cameraId} socketId=${socket.id}`);
 
@@ -128,10 +150,20 @@ io.on('connection', (socket) => {
         }
 
         socket.join(grupoSessao(token));
+        socket.token = token;
+        socket.observandoCameraId = cameraId;
+        sessionStore.adicionarObservador(token, cameraId, socket.id);
+
         console.log(`[Observador conectado] token=${token} cameraId=${cameraId} socketId=${socket.id}`);
 
         // Pede à câmera específica que envie o Offer a este observador.
         io.to(camera.socketId).emit('novoEspectador', socket.id);
+
+        if (camera.vertical !== null) {
+            socket.emit('orientacaoCameraAtualizada', { cameraId, vertical: camera.vertical });
+        }
+
+        notificarContagemObservadores(token, cameraId);
     });
 
     socket.on('entrarComoDashboard', (token) => {
@@ -154,6 +186,13 @@ io.on('connection', (socket) => {
         camerasAtivas.forEach((cam) => {
             socket.emit('novaCameraConectada', { socketId: cam.socketId, cameraId: cam.cameraId });
             io.to(cam.socketId).emit('novoEspectador', socket.id);
+
+            const quantidade = sessionStore.contarObservadores(token, cam.cameraId);
+            socket.emit('contagemObservadoresAtualizada', { cameraId: cam.cameraId, quantidade });
+
+            if (cam.vertical !== null) {
+                socket.emit('orientacaoCameraAtualizada', { cameraId: cam.cameraId, vertical: cam.vertical });
+            }
         });
     });
 
@@ -173,6 +212,11 @@ io.on('connection', (socket) => {
         sessionStore.atualizarAtividade(token);
     });
 
+    socket.on('orientacaoAtualizada', ({ token, vertical }) => {
+        sessionStore.atualizarOrientacaoCamera(token, socket.cameraId, vertical);
+        io.to(grupoSessao(token)).emit('orientacaoCameraAtualizada', { cameraId: socket.cameraId, vertical });
+    });
+
     socket.on('pararTransmissao', (token) => {
         const sessao = sessionStore.removerCameraPorSocketId(socket.id);
         if (sessao) {
@@ -187,6 +231,12 @@ io.on('connection', (socket) => {
         if (sessaoComoCamera) {
             io.to(grupoSessao(sessaoComoCamera.token)).emit('cameraDesconectada', { socketId: socket.id, cameraId: socket.cameraId });
             console.log(`[Câmera desconectada] token=${sessaoComoCamera.token} cameraId=${socket.cameraId} socketId=${socket.id}`);
+            return;
+        }
+
+        const removidoComoObservador = sessionStore.removerObservadorPorSocketId(socket.id);
+        if (removidoComoObservador) {
+            notificarContagemObservadores(removidoComoObservador.sessao.token, removidoComoObservador.cameraId);
             return;
         }
 

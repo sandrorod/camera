@@ -1,12 +1,12 @@
 // dashboard.js
-// Controla o dashboard: mantém uma lista de sessões (links gerados), persistida em
-// localStorage para sobreviver a reloads. Para cada sessão, abre uma conexão
+// Controla o dashboard: mantém uma lista de sessões (links gerados), persistida no
+// banco (Supabase, via API do servidor) para que apareça em qualquer dispositivo,
+// não só no navegador que gerou o link. Para cada sessão, abre uma conexão
 // Socket.io dedicada, cria uma RTCPeerConnection por câmera conectada, e renderiza
 // um card com vídeo para cada uma em um grid próprio daquela sessão. Cards e
 // seções aparecem/desaparecem automaticamente conforme câmeras/sessões mudam.
 
 (function () {
-    const STORAGE_KEY = 'securitycam_sessions';
     const serverUrl = window.__SECURITYCAM_CONFIG__.serverUrl;
 
     const elSessionsList = document.getElementById('sessions-list');
@@ -24,19 +24,19 @@
      * @property {Map<string, RTCPeerConnection>} peerConnections
      * @property {Map<string, HTMLVideoElement>} videoElements
      * @property {Map<string, string>} cameraIds - socketId -> cameraId persistente
+     * @property {Map<string, HTMLElement>} camerasPorId - cameraId -> elemento .camera-card
      * @property {HTMLElement} elCard - elemento .session-card
      */
 
-    function carregarTokensSalvos() {
+    async function carregarTokensSalvos() {
         try {
-            return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-        } catch {
+            const resposta = await fetch(`${serverUrl}/api/sessions`);
+            const dados = await resposta.json();
+            return dados.tokens || [];
+        } catch (erro) {
+            console.error('[Dashboard] Erro ao carregar sessões salvas:', erro);
             return [];
         }
-    }
-
-    function salvarTokens() {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify([...sessoes.keys()]));
     }
 
     function atualizarEmptyState() {
@@ -102,6 +102,7 @@
         elCard.dataset.socketId = cameraSocketId;
 
         sessaoUI.videoElements.set(cameraSocketId, video);
+        if (cameraId) sessaoUI.camerasPorId.set(cameraId, elCard);
         atualizarSessionEmptyState(sessaoUI);
         return video;
     }
@@ -113,7 +114,23 @@
         video.srcObject = null;
         video.closest('.camera-card')?.remove();
         sessaoUI.videoElements.delete(cameraSocketId);
+
+        const cameraId = sessaoUI.cameraIds.get(cameraSocketId);
+        if (cameraId) sessaoUI.camerasPorId.delete(cameraId);
+
         atualizarSessionEmptyState(sessaoUI);
+    }
+
+    function atualizarContagemObservadores(sessaoUI, cameraId, quantidade) {
+        const elCard = sessaoUI.camerasPorId.get(cameraId);
+        if (!elCard) return;
+        elCard.querySelector('.camera-card-viewers-count').textContent = String(quantidade);
+    }
+
+    function atualizarOrientacaoCamera(sessaoUI, cameraId, vertical) {
+        const elCard = sessaoUI.camerasPorId.get(cameraId);
+        if (!elCard) return;
+        elCard.classList.toggle('camera-card-vertical', vertical);
     }
 
     function criarPeerConnectionParaCamera(sessaoUI, iceConfig, cameraSocketId) {
@@ -168,11 +185,11 @@
             peerConnections: new Map(),
             videoElements: new Map(),
             cameraIds: new Map(),
+            camerasPorId: new Map(),
             elCard
         };
         sessoes.set(token, sessaoUI);
         atualizarEmptyState();
-        salvarTokens();
 
         const iceConfig = await buscarIceConfig(serverUrl);
 
@@ -191,6 +208,14 @@
         connection.on('cameraDesconectada', ({ socketId }) => {
             sessaoUI.cameraIds.delete(socketId);
             encerrarPeerConnection(sessaoUI, socketId);
+        });
+
+        connection.on('contagemObservadoresAtualizada', ({ cameraId, quantidade }) => {
+            atualizarContagemObservadores(sessaoUI, cameraId, quantidade);
+        });
+
+        connection.on('orientacaoCameraAtualizada', ({ cameraId, vertical }) => {
+            atualizarOrientacaoCamera(sessaoUI, cameraId, vertical);
         });
 
         connection.on('receberOffer', async ({ senderSocketId, sdpOffer }) => {
@@ -221,7 +246,7 @@
         });
     }
 
-    function removerSessao(token) {
+    async function removerSessao(token) {
         const sessaoUI = sessoes.get(token);
         if (!sessaoUI) return;
 
@@ -231,7 +256,12 @@
         sessoes.delete(token);
 
         atualizarEmptyState();
-        salvarTokens();
+
+        try {
+            await fetch(`${serverUrl}/api/sessions/${encodeURIComponent(token)}`, { method: 'DELETE' });
+        } catch (erro) {
+            console.error('[Dashboard] Erro ao remover sessão no servidor:', erro);
+        }
     }
 
     async function criarNovaSessao(expiracaoMinutos) {
@@ -251,7 +281,9 @@
         document.getElementById('input-expiracao').value = '';
     });
 
-    // Restaura sessões salvas ao carregar a página.
-    carregarTokensSalvos().forEach((token) => adicionarSessao(token));
-    atualizarEmptyState();
+    // Restaura sessões salvas (de qualquer dispositivo) ao carregar a página.
+    carregarTokensSalvos().then((tokens) => {
+        tokens.forEach((token) => adicionarSessao(token));
+        atualizarEmptyState();
+    });
 })();

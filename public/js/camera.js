@@ -141,7 +141,28 @@
             fpsReal
         );
 
+        notificarOrientacaoSeMudou(trackSettings.width, trackSettings.height);
         monitorarFpsReal(stream);
+    }
+
+    /**
+     * A proporção real da track de vídeo (não a resolução nominal selecionada)
+     * já reflete a orientação física do celular — sensores móveis ajustam
+     * width/height automaticamente ao girar o aparelho. Avisa o dashboard e
+     * observadores sempre que a orientação detectada mudar, para que ajustem
+     * o aspect-ratio do vídeo exibido (retrato vs paisagem) em vez de cortar
+     * ou distorcer a imagem.
+     */
+    let orientacaoAtual = null;
+    function notificarOrientacaoSeMudou(width, height) {
+        if (!width || !height) return;
+        const vertical = height > width;
+        if (orientacaoAtual === vertical) return;
+        orientacaoAtual = vertical;
+
+        if (connection && connection.connected) {
+            connection.emit('orientacaoAtualizada', { token: config.token, vertical });
+        }
     }
 
     function monitorarFpsReal(stream) {
@@ -157,22 +178,28 @@
             if (settings.frameRate) {
                 elFpsLabel.textContent = `${Math.round(settings.frameRate)} fps`;
             }
+            notificarOrientacaoSeMudou(settings.width, settings.height);
         }, 3000);
     }
 
     /**
-     * O WebRTC aplica por padrão um teto de bitrate conservador (na prática,
-     * ~1-2.5 Mbps dependendo do navegador) independente da resolução da track,
-     * o que deixa a imagem visivelmente comprimida em Full HD/4K. Define um
-     * maxBitrate proporcional à resolução real capturada para a câmera poder
-     * de fato usar a qualidade selecionada.
+     * O WebRTC aplica por padrão um teto de bitrate conservador (~1-2.5 Mbps)
+     * independente da resolução da track, deixando a imagem comprimida em
+     * Full HD/4K. Porém setar um teto muito acima do upload real do celular
+     * (ex: 12 Mbps em 4G/Wi-Fi doméstico, que raramente sustenta isso) faz o
+     * encoder mirar um bitrate inalcançável, causando congestionamento, perda
+     * de pacotes e travamentos — pior que a compressão original. Os valores
+     * abaixo são um meio-termo: acima do teto padrão para melhorar a nitidez,
+     * mas dentro do que uploads móveis/residenciais comuns sustentam. O
+     * controle de congestionamento do WebRTC (GCC) ainda reduz dinamicamente
+     * abaixo deste teto se a rede não suportar.
      */
     function bitrateMaximoParaResolucao(largura, altura) {
         const pixels = largura * altura;
-        if (pixels >= 3840 * 2160) return 12_000_000; // 4K
-        if (pixels >= 1920 * 1080) return 6_000_000;  // Full HD
-        if (pixels >= 1280 * 720) return 3_000_000;   // HD
-        return 1_200_000;                              // SD
+        if (pixels >= 3840 * 2160) return 4_000_000;  // 4K
+        if (pixels >= 1920 * 1080) return 2_500_000;  // Full HD
+        if (pixels >= 1280 * 720) return 1_500_000;   // HD
+        return 800_000;                                // SD
     }
 
     async function aplicarBitrateMaximo(pc) {
@@ -187,6 +214,9 @@
             params.encodings = [{}];
         }
         params.encodings[0].maxBitrate = maxBitrate;
+        // Prioriza manter o frame rate fluido (sem travar) em vez de preservar
+        // resolução quando a rede/CPU não acompanha o bitrate configurado.
+        params.degradationPreference = 'maintain-framerate';
 
         try {
             await sender.setParameters(params);
@@ -244,6 +274,14 @@
 
         connection.on('cameraConfirmada', () => {
             definirStatus('Transmissão ativa. Aguardando conexão com o dashboard...');
+
+            // Garante que a orientação inicial seja enviada agora que a conexão existe
+            // (na primeira captura, a conexão ainda não tinha sido criada).
+            const settings = localStream?.getVideoTracks()[0]?.getSettings() ?? {};
+            if (settings.width && settings.height) {
+                orientacaoAtual = null;
+                notificarOrientacaoSeMudou(settings.width, settings.height);
+            }
         });
 
         connection.on('novoEspectador', async (dashboardSocketId) => {

@@ -18,8 +18,9 @@ const sessoes = new Map();
 /**
  * @typedef {Object} Sessao
  * @property {string} token
- * @property {Map<string, { cameraId: string, socketId: string, conectadaEm: number }>} cameras - chave: cameraId
+ * @property {Map<string, { cameraId: string, socketId: string, conectadaEm: number, vertical: boolean|null }>} cameras - chave: cameraId
  * @property {Set<string>} dashboards
+ * @property {Map<string, Set<string>>} observadoresPorCamera - cameraId -> socketIds assistindo via watch.html
  * @property {number} criadaEm
  * @property {number} ultimaAtividade
  * @property {number|null} expiraEm
@@ -36,24 +37,42 @@ function gerarTokenSeguro() {
 
 function criarSessao(expiracaoMinutos) {
     const token = gerarTokenSeguro();
-    const agora = Date.now();
+    const sessao = criarSessaoComToken(token);
+    if (expiracaoMinutos) {
+        sessao.expiraEm = Date.now() + expiracaoMinutos * 60 * 1000;
+    }
+    return sessao;
+}
 
+/**
+ * Obtém a sessão em memória pelo token. Se não existir mas o token tiver um
+ * formato válido (gerado por gerarTokenSeguro), cria uma sessão em memória sob
+ * demanda — necessário para sessões persistidas no banco sobreviverem a um
+ * restart do servidor: o registro em si (quais câmeras existem) está no
+ * Supabase, mas o estado de conexão (sockets ativos) é sempre recriado aqui.
+ */
+function obterSessao(token) {
+    let sessao = sessoes.get(token);
+    if (!sessao && typeof token === 'string' && token.length > 0) {
+        sessao = criarSessaoComToken(token);
+    }
+    return sessao || null;
+}
+
+function criarSessaoComToken(token) {
+    const agora = Date.now();
     const sessao = {
         token,
         cameras: new Map(),
         dashboards: new Set(),
+        observadoresPorCamera: new Map(),
         criadaEm: agora,
         ultimaAtividade: agora,
-        expiraEm: expiracaoMinutos ? agora + expiracaoMinutos * 60 * 1000 : null,
+        expiraEm: null,
         ativa: true
     };
-
     sessoes.set(token, sessao);
     return sessao;
-}
-
-function obterSessao(token) {
-    return sessoes.get(token) || null;
 }
 
 function sessaoExpirada(sessao) {
@@ -63,9 +82,22 @@ function sessaoExpirada(sessao) {
 function adicionarCamera(token, cameraId, socketId) {
     const sessao = obterSessao(token);
     if (!sessao) return null;
-    sessao.cameras.set(cameraId, { cameraId, socketId, conectadaEm: Date.now() });
+    const existente = sessao.cameras.get(cameraId);
+    sessao.cameras.set(cameraId, {
+        cameraId,
+        socketId,
+        conectadaEm: Date.now(),
+        vertical: existente?.vertical ?? null
+    });
     sessao.ultimaAtividade = Date.now();
     return sessao;
+}
+
+function atualizarOrientacaoCamera(token, cameraId, vertical) {
+    const sessao = obterSessao(token);
+    const cam = sessao?.cameras.get(cameraId);
+    if (!cam) return;
+    cam.vertical = vertical;
 }
 
 function removerCameraPorSocketId(socketId) {
@@ -94,6 +126,42 @@ function obterCameraPorCameraId(token, cameraId) {
     const sessao = obterSessao(token);
     if (!sessao) return null;
     return sessao.cameras.get(cameraId) || null;
+}
+
+/**
+ * Registra um observador (watch.html) assistindo a uma câmera específica.
+ * Retorna a sessão e a contagem atualizada de observadores daquela câmera.
+ */
+function adicionarObservador(token, cameraId, socketId) {
+    const sessao = obterSessao(token);
+    if (!sessao) return null;
+
+    if (!sessao.observadoresPorCamera.has(cameraId)) {
+        sessao.observadoresPorCamera.set(cameraId, new Set());
+    }
+    sessao.observadoresPorCamera.get(cameraId).add(socketId);
+    return sessao;
+}
+
+/**
+ * Remove um observador pelo seu socketId, de qualquer câmera em que estivesse.
+ * Retorna { sessao, cameraId } se encontrado, para notificar a contagem nova.
+ */
+function removerObservadorPorSocketId(socketId) {
+    for (const sessao of sessoes.values()) {
+        for (const [cameraId, observadores] of sessao.observadoresPorCamera.entries()) {
+            if (observadores.delete(socketId)) {
+                return { sessao, cameraId };
+            }
+        }
+    }
+    return null;
+}
+
+function contarObservadores(token, cameraId) {
+    const sessao = obterSessao(token);
+    if (!sessao) return 0;
+    return sessao.observadoresPorCamera.get(cameraId)?.size || 0;
 }
 
 function adicionarDashboard(token, socketId) {
@@ -130,6 +198,7 @@ function encerrarSessao(token) {
     sessao.ativa = false;
     sessao.cameras.clear();
     sessao.dashboards.clear();
+    sessao.observadoresPorCamera.clear();
 }
 
 /**
@@ -148,6 +217,7 @@ function encerrarSessoesInativas() {
             sessao.ativa = false;
             sessao.cameras.clear();
             sessao.dashboards.clear();
+            sessao.observadoresPorCamera.clear();
             encerradas++;
         }
     }
@@ -160,9 +230,13 @@ module.exports = {
     obterSessao,
     sessaoExpirada,
     adicionarCamera,
+    atualizarOrientacaoCamera,
     removerCameraPorSocketId,
     listarCameras,
     obterCameraPorCameraId,
+    adicionarObservador,
+    removerObservadorPorSocketId,
+    contarObservadores,
     adicionarDashboard,
     removerDashboardPorSocketId,
     listarDashboards,
