@@ -516,6 +516,10 @@
             localStream.getTracks().forEach((track) => track.stop());
             localStream = null;
         }
+        // Sem isso, o elemento <video> continua exibindo o último frame do
+        // stream antigo mesmo com as tracks paradas — o preview local parecia
+        // continuar "ao vivo" mesmo após a transmissão real ter encerrado.
+        elLocalPreview.srcObject = null;
 
         elRecIndicator.classList.add('hidden');
         elBtnStart.classList.remove('hidden');
