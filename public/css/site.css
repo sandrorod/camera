@@ -571,48 +571,28 @@ html, body {
     color: #06231a !important;
 }
 
-/* ----- Lista de sessões (links gerados) ----- */
+/* ----- Link ativo e QR code ----- */
 
-.sessions-list {
+.qrcode-box {
     display: flex;
     flex-direction: column;
-    gap: 20px;
-}
-
-.session-card {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.session-header {
-    display: flex;
     align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-}
-
-.session-header .share-link-row {
-    flex: 1;
-    min-width: 200px;
-}
-
-.session-header .btn-remove-session {
-    flex: 0;
-    min-width: 90px;
-}
-
-.session-empty-state {
-    color: var(--text-secondary);
-    font-size: 13px;
-    text-align: center;
+    gap: 8px;
     padding: 16px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
 }
 
-.session-empty-state.hidden {
-    display: none;
+.qrcode-box #qrcode-canvas {
+    line-height: 0;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.qrcode-hint {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-align: center;
 }

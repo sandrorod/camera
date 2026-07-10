@@ -1,21 +1,44 @@
 // dashboard.js
-// Controla o dashboard: mantém uma lista de sessões (links gerados), persistida no
-// banco (Supabase, via API do servidor) para que apareça em qualquer dispositivo,
-// não só no navegador que gerou o link. Para cada sessão, abre uma conexão
-// Socket.io dedicada, cria uma RTCPeerConnection por câmera conectada, e renderiza
-// um card com vídeo para cada uma em um grid próprio daquela sessão. Cards e
-// seções aparecem/desaparecem automaticamente conforme câmeras/sessões mudam.
+// Controla o dashboard: mantém um único link ativo por vez (persistido no banco,
+// via API do servidor) para que apareça em qualquer dispositivo, não só no
+// navegador que gerou o link. Ao gerar um novo link, o anterior é removido no
+// servidor e substituído. Abre uma conexão Socket.io para a sessão ativa, cria
+// uma RTCPeerConnection por câmera conectada, e renderiza um card com vídeo para
+// cada uma no grid. Cards aparecem/desaparecem automaticamente conforme câmeras
+// conectam/desconectam.
 
 (function () {
     const serverUrl = window.__SECURITYCAM_CONFIG__.serverUrl;
 
-    const elSessionsList = document.getElementById('sessions-list');
+    const elCamerasGrid = document.getElementById('cameras-grid');
     const elEmptyState = document.getElementById('empty-state');
-    const templateSession = document.getElementById('template-session');
+    const elLinkAtual = document.getElementById('input-link-atual');
+    const elBtnCopiarLink = document.getElementById('btn-copiar-link');
+    const elQrcodeCanvas = document.getElementById('qrcode-canvas');
     const templateCameraCard = document.getElementById('template-camera-card');
 
-    /** @type {Map<string, SessaoUI>} token -> estado da sessão no dashboard */
-    const sessoes = new Map();
+    let qrcode = null;
+
+    /** Estado da única sessão ativa no dashboard. */
+    let sessaoAtual = null;
+
+    const CHAVE_TOKEN_ATUAL = 'securitycam:tokenAtual';
+
+    function salvarTokenLocal(token) {
+        try {
+            localStorage.setItem(CHAVE_TOKEN_ATUAL, token);
+        } catch (erro) {
+            console.warn('[Dashboard] Não foi possível salvar o token localmente:', erro);
+        }
+    }
+
+    function lerTokenLocal() {
+        try {
+            return localStorage.getItem(CHAVE_TOKEN_ATUAL);
+        } catch (erro) {
+            return null;
+        }
+    }
 
     /**
      * @typedef {Object} SessaoUI
@@ -25,7 +48,6 @@
      * @property {Map<string, HTMLVideoElement>} videoElements
      * @property {Map<string, string>} cameraIds - socketId -> cameraId persistente
      * @property {Map<string, HTMLElement>} camerasPorId - cameraId -> elemento .camera-card
-     * @property {HTMLElement} elCard - elemento .session-card
      */
 
     async function carregarTokensSalvos() {
@@ -40,7 +62,8 @@
     }
 
     function atualizarEmptyState() {
-        elEmptyState.classList.toggle('hidden', sessoes.size > 0);
+        const temCameras = sessaoAtual && sessaoAtual.videoElements.size > 0;
+        elEmptyState.classList.toggle('hidden', !!temCameras);
     }
 
     function linkCameraPara(token) {
@@ -82,24 +105,25 @@
         }, 1500);
     }
 
-    function criarSecaoSessao(token) {
-        const fragment = templateSession.content.cloneNode(true);
-        const elCard = fragment.querySelector('.session-card');
-        const elLinkInput = fragment.querySelector('.session-link-input');
-        const elBtnCopiar = fragment.querySelector('.btn-copy-session-link');
-        const elBtnRemover = fragment.querySelector('.btn-remove-session');
+    function atualizarLinkEQrcode(token) {
+        const link = linkCameraPara(token);
+        elLinkAtual.value = link;
 
-        elLinkInput.value = linkCameraPara(token);
-        elBtnCopiar.addEventListener('click', () => copiarTexto(elLinkInput.value, elBtnCopiar));
-        elBtnRemover.addEventListener('click', () => removerSessao(token));
-
-        elSessionsList.appendChild(fragment);
-        return elSessionsList.lastElementChild;
+        elQrcodeCanvas.innerHTML = '';
+        qrcode = new QRCode(elQrcodeCanvas, {
+            text: link,
+            width: 200,
+            height: 200,
+            colorDark: '#0b0f14',
+            colorLight: '#eef2f6',
+            correctLevel: QRCode.CorrectLevel.M
+        });
     }
 
-    function atualizarSessionEmptyState(sessaoUI) {
-        const temCameras = sessaoUI.videoElements.size > 0;
-        sessaoUI.elCard.querySelector('.session-empty-state').classList.toggle('hidden', temCameras);
+    elBtnCopiarLink.addEventListener('click', () => copiarTexto(elLinkAtual.value, elBtnCopiarLink));
+
+    function limparCamerasUI() {
+        elCamerasGrid.innerHTML = '';
     }
 
     function criarCardCamera(sessaoUI, cameraSocketId, cameraId) {
@@ -118,12 +142,12 @@
             elBtnCopiarCamera.disabled = true;
         }
 
-        sessaoUI.elCard.querySelector('.cameras-grid').appendChild(fragment);
+        elCamerasGrid.appendChild(fragment);
         elCard.dataset.socketId = cameraSocketId;
 
         sessaoUI.videoElements.set(cameraSocketId, video);
         if (cameraId) sessaoUI.camerasPorId.set(cameraId, elCard);
-        atualizarSessionEmptyState(sessaoUI);
+        atualizarEmptyState();
         return video;
     }
 
@@ -138,7 +162,7 @@
         const cameraId = sessaoUI.cameraIds.get(cameraSocketId);
         if (cameraId) sessaoUI.camerasPorId.delete(cameraId);
 
-        atualizarSessionEmptyState(sessaoUI);
+        atualizarEmptyState();
     }
 
     function atualizarContagemObservadores(sessaoUI, cameraId, quantidade) {
@@ -195,23 +219,25 @@
         removerCardCamera(sessaoUI, cameraSocketId);
     }
 
-    async function adicionarSessao(token) {
-        if (sessoes.has(token)) return;
+    async function conectarSessao(token) {
+        salvarTokenLocal(token);
 
-        const elCard = criarSecaoSessao(token);
         const sessaoUI = {
             token,
             connection: null,
             peerConnections: new Map(),
             videoElements: new Map(),
             cameraIds: new Map(),
-            camerasPorId: new Map(),
-            elCard
+            camerasPorId: new Map()
         };
-        sessoes.set(token, sessaoUI);
+        sessaoAtual = sessaoUI;
+
+        limparCamerasUI();
+        atualizarLinkEQrcode(token);
         atualizarEmptyState();
 
         const iceConfig = await buscarIceConfig(serverUrl);
+        if (sessaoAtual !== sessaoUI) return; // trocado enquanto aguardava
 
         const connection = criarConexaoSocket(serverUrl, (estado, conexaoAtual) => {
             if (estado === 'conectado') {
@@ -266,44 +292,59 @@
         });
     }
 
-    async function removerSessao(token) {
-        const sessaoUI = sessoes.get(token);
-        if (!sessaoUI) return;
+    async function desconectarSessaoAtual() {
+        if (!sessaoAtual) return;
+        const tokenAntigo = sessaoAtual.token;
 
-        sessaoUI.peerConnections.forEach((pc) => pc.close());
-        sessaoUI.connection?.disconnect();
-        sessaoUI.elCard.remove();
-        sessoes.delete(token);
-
-        atualizarEmptyState();
+        sessaoAtual.peerConnections.forEach((pc) => pc.close());
+        sessaoAtual.connection?.disconnect();
+        sessaoAtual = null;
+        limparCamerasUI();
 
         try {
-            await fetch(`${serverUrl}/api/sessions/${encodeURIComponent(token)}`, { method: 'DELETE' });
+            await fetch(`${serverUrl}/api/sessions/${encodeURIComponent(tokenAntigo)}`, { method: 'DELETE' });
         } catch (erro) {
-            console.error('[Dashboard] Erro ao remover sessão no servidor:', erro);
+            console.error('[Dashboard] Erro ao remover sessão antiga no servidor:', erro);
         }
     }
 
-    async function criarNovaSessao(expiracaoMinutos) {
+    async function gerarNovoLink(expiracaoMinutos) {
+        await desconectarSessaoAtual();
+
         const resposta = await fetch(`${serverUrl}/api/sessions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ expiracaoMinutos: expiracaoMinutos ? Number(expiracaoMinutos) : null })
         });
         const dados = await resposta.json();
-        await adicionarSessao(dados.token);
+        await conectarSessao(dados.token);
     }
 
     document.getElementById('form-criar').addEventListener('submit', async (event) => {
         event.preventDefault();
         const expiracaoMinutos = document.getElementById('input-expiracao').value || null;
-        await criarNovaSessao(expiracaoMinutos);
+        await gerarNovoLink(expiracaoMinutos);
         document.getElementById('input-expiracao').value = '';
     });
 
-    // Restaura sessões salvas (de qualquer dispositivo) ao carregar a página.
-    carregarTokensSalvos().then((tokens) => {
-        tokens.forEach((token) => adicionarSessao(token));
-        atualizarEmptyState();
-    });
+    // Restaura o link ativo ao carregar a página. O token fica salvo no
+    // localStorage deste navegador (fonte primária, pois o servidor só lista
+    // tokens que já têm câmera conectada); em outro dispositivo sem token local,
+    // cai para o último token com câmeras registradas no servidor. Se nenhum dos
+    // dois existir, gera um novo automaticamente para que o dashboard sempre
+    // tenha um único link ativo pronto para compartilhar.
+    (async () => {
+        const tokenLocal = lerTokenLocal();
+        if (tokenLocal) {
+            await conectarSessao(tokenLocal);
+            return;
+        }
+
+        const tokens = await carregarTokensSalvos();
+        if (tokens.length > 0) {
+            await conectarSessao(tokens[0]);
+        } else {
+            await gerarNovoLink(null);
+        }
+    })();
 })();

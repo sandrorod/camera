@@ -17,38 +17,32 @@
         </header>
 
         <section class="share-section">
+            <div class="share-link-row">
+                <input id="input-link-atual" class="session-link-input" type="text" readonly />
+                <button id="btn-copiar-link" class="btn btn-secondary btn-small">Copiar</button>
+            </div>
+            <div id="qrcode-box" class="qrcode-box">
+                <div id="qrcode-canvas"></div>
+                <p class="qrcode-hint">Aponte a câmera do celular para conectar</p>
+            </div>
             <form id="form-criar" class="share-form">
                 <label class="field">
-                    <span>Expiração do link (opcional, em minutos)</span>
+                    <span>Expiração do novo link (opcional, em minutos)</span>
                     <input type="number" id="input-expiracao" min="1" placeholder="Ex: 120 (sem expiração se vazio)" />
                 </label>
 
-                <button type="submit" class="btn btn-primary">+ Gerar Link</button>
+                <button type="submit" class="btn btn-primary">Gerar novo link</button>
             </form>
         </section>
 
         <main class="dashboard-main">
-            <div id="empty-state" class="empty-state">
-                <p>Nenhum link gerado ainda.</p>
-                <p class="empty-state-hint">Clique em "+ Gerar Link" para criar um link compartilhável e começar a receber câmeras.</p>
+            <div id="empty-state" class="empty-state hidden">
+                <p>Nenhuma câmera conectada ainda.</p>
+                <p class="empty-state-hint">Compartilhe o link ou o QR code acima com o celular que será usado como câmera.</p>
             </div>
-            <div id="sessions-list" class="sessions-list"></div>
+            <div id="cameras-grid" class="cameras-grid"></div>
         </main>
     </div>
-
-    <template id="template-session">
-        <section class="session-card">
-            <div class="session-header">
-                <div class="share-link-row">
-                    <input class="session-link-input" type="text" readonly />
-                    <button class="btn btn-secondary btn-small btn-copy-session-link">Copiar</button>
-                </div>
-                <button class="btn btn-danger btn-small btn-remove-session">Remover</button>
-            </div>
-            <div class="session-empty-state">Nenhuma câmera conectada a este link ainda.</div>
-            <div class="cameras-grid"></div>
-        </section>
-    </template>
 
     <template id="template-camera-card">
         <div class="camera-card">
@@ -69,6 +63,7 @@
             serverUrl: window.SECURITYCAM_SERVER_URL
         };
     </script>
+    <script src="/js/qrcode.js"></script>
     <script src="/js/webrtc-common.js"></script>
     <script src="/js/dashboard.js"></script>
 </body>
