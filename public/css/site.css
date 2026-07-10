@@ -460,21 +460,10 @@ html, body {
     gap: 12px;
 }
 
-.share-form {
-    display: flex;
-    align-items: flex-end;
-    gap: 12px;
-    flex-wrap: wrap;
-}
-
-.share-form .field {
-    flex: 1;
-    min-width: 220px;
-}
-
-.share-form .btn {
+#btn-gerar-novo-link {
     flex: 0;
-    min-width: 140px;
+    align-self: flex-start;
+    min-width: 160px;
 }
 
 .dashboard-main {
@@ -590,26 +579,71 @@ html, body {
     margin: 4px 0 -4px;
 }
 
-.qrcode-box {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    padding: 16px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius);
-}
-
-.qrcode-box #qrcode-canvas {
-    line-height: 0;
-    border-radius: 6px;
-    overflow: hidden;
-}
-
 .qrcode-hint {
     margin: 0;
     font-size: 12px;
     color: var(--text-secondary);
     text-align: center;
+}
+
+.qrcode-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+
+.qrcode-modal.hidden {
+    display: none;
+}
+
+.qrcode-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+}
+
+.qrcode-modal-box {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 24px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    max-width: 320px;
+    width: 100%;
+}
+
+.qrcode-modal-box #qrcode-canvas {
+    line-height: 0;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.btn-fechar-modal {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0, 0, 0, 0.3);
+    color: var(--text-primary);
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-fechar-modal:hover {
+    background: rgba(0, 0, 0, 0.5);
 }

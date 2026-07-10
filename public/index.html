@@ -20,28 +20,29 @@
             <label class="field-label">Link para conectar câmeras</label>
             <div class="share-link-row">
                 <input id="input-link-atual" class="session-link-input" type="text" readonly />
+                <button id="btn-qrcode-link" class="btn btn-secondary btn-small" title="Mostrar QR code">QR Code</button>
                 <button id="btn-copiar-link" class="btn btn-secondary btn-small">Copiar</button>
             </div>
-            <div id="qrcode-box" class="qrcode-box">
-                <div id="qrcode-canvas"></div>
-                <p class="qrcode-hint">Aponte a câmera do celular para conectar</p>
-            </div>
-            <form id="form-criar" class="share-form">
-                <label class="field">
-                    <span>Expiração do novo link (opcional, em minutos)</span>
-                    <input type="number" id="input-expiracao" min="1" placeholder="Ex: 120 (sem expiração se vazio)" />
-                </label>
 
-                <button type="submit" class="btn btn-primary">Gerar novo link</button>
-            </form>
+            <button id="btn-gerar-novo-link" type="button" class="btn btn-primary">Gerar novo link</button>
 
             <label class="field-label">Link para assistir (mesmo para todas as câmeras)</label>
             <div class="share-link-row">
                 <input id="input-link-assistir" class="session-link-input" type="text" readonly />
+                <button id="btn-qrcode-link-assistir" class="btn btn-secondary btn-small" title="Mostrar QR code">QR Code</button>
                 <button id="btn-copiar-link-assistir" class="btn btn-secondary btn-small">Copiar</button>
             </div>
             <p class="qrcode-hint">Esse link sempre mostra a câmera marcada como "Selecionada" abaixo. Clique em "Selecionar" no card para trocar.</p>
         </section>
+
+        <div id="qrcode-modal" class="qrcode-modal hidden">
+            <div class="qrcode-modal-backdrop"></div>
+            <div class="qrcode-modal-box">
+                <button id="btn-fechar-qrcode-modal" class="btn-fechar-modal" title="Fechar" aria-label="Fechar">&times;</button>
+                <div id="qrcode-canvas"></div>
+                <p class="qrcode-hint">Aponte a câmera do celular para conectar</p>
+            </div>
+        </div>
 
         <main class="dashboard-main">
             <div id="empty-state" class="empty-state hidden">

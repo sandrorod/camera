@@ -14,9 +14,14 @@
     const elEmptyState = document.getElementById('empty-state');
     const elLinkAtual = document.getElementById('input-link-atual');
     const elBtnCopiarLink = document.getElementById('btn-copiar-link');
+    const elBtnQrcodeLink = document.getElementById('btn-qrcode-link');
     const elLinkAssistir = document.getElementById('input-link-assistir');
     const elBtnCopiarLinkAssistir = document.getElementById('btn-copiar-link-assistir');
+    const elBtnQrcodeLinkAssistir = document.getElementById('btn-qrcode-link-assistir');
+    const elBtnGerarNovoLink = document.getElementById('btn-gerar-novo-link');
+    const elQrcodeModal = document.getElementById('qrcode-modal');
     const elQrcodeCanvas = document.getElementById('qrcode-canvas');
+    const elBtnFecharQrcodeModal = document.getElementById('btn-fechar-qrcode-modal');
     const templateCameraCard = document.getElementById('template-camera-card');
 
     let qrcode = null;
@@ -108,11 +113,12 @@
         }, 1500);
     }
 
-    function atualizarLinkEQrcode(token) {
-        const link = linkCameraPara(token);
-        elLinkAtual.value = link;
+    function atualizarLinks(token) {
+        elLinkAtual.value = linkCameraPara(token);
         elLinkAssistir.value = linkVisualizacaoPara(token);
+    }
 
+    function abrirQrcodeModal(link) {
         elQrcodeCanvas.innerHTML = '';
         qrcode = new QRCode(elQrcodeCanvas, {
             text: link,
@@ -122,10 +128,23 @@
             colorLight: '#eef2f6',
             correctLevel: QRCode.CorrectLevel.M
         });
+        elQrcodeModal.classList.remove('hidden');
+    }
+
+    function fecharQrcodeModal() {
+        elQrcodeModal.classList.add('hidden');
+        elQrcodeCanvas.innerHTML = '';
     }
 
     elBtnCopiarLink.addEventListener('click', () => copiarTexto(elLinkAtual.value, elBtnCopiarLink));
     elBtnCopiarLinkAssistir.addEventListener('click', () => copiarTexto(elLinkAssistir.value, elBtnCopiarLinkAssistir));
+    elBtnQrcodeLink.addEventListener('click', () => abrirQrcodeModal(elLinkAtual.value));
+    elBtnQrcodeLinkAssistir.addEventListener('click', () => abrirQrcodeModal(elLinkAssistir.value));
+    elBtnFecharQrcodeModal.addEventListener('click', fecharQrcodeModal);
+    elQrcodeModal.querySelector('.qrcode-modal-backdrop').addEventListener('click', fecharQrcodeModal);
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !elQrcodeModal.classList.contains('hidden')) fecharQrcodeModal();
+    });
 
     function limparCamerasUI() {
         elCamerasGrid.innerHTML = '';
@@ -253,7 +272,7 @@
         sessaoAtual = sessaoUI;
 
         limparCamerasUI();
-        atualizarLinkEQrcode(token);
+        atualizarLinks(token);
         atualizarEmptyState();
 
         const iceConfig = await buscarIceConfig(serverUrl);
@@ -333,24 +352,19 @@
         }
     }
 
-    async function gerarNovoLink(expiracaoMinutos) {
+    async function gerarNovoLink() {
         await desconectarSessaoAtual();
 
         const resposta = await fetch(`${serverUrl}/api/sessions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ expiracaoMinutos: expiracaoMinutos ? Number(expiracaoMinutos) : null })
+            body: JSON.stringify({})
         });
         const dados = await resposta.json();
         await conectarSessao(dados.token);
     }
 
-    document.getElementById('form-criar').addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const expiracaoMinutos = document.getElementById('input-expiracao').value || null;
-        await gerarNovoLink(expiracaoMinutos);
-        document.getElementById('input-expiracao').value = '';
-    });
+    elBtnGerarNovoLink.addEventListener('click', () => gerarNovoLink());
 
     // Restaura o link ativo ao carregar a página. O token fica salvo no
     // localStorage deste navegador (fonte primária, pois o servidor só lista
@@ -369,7 +383,7 @@
         if (tokens.length > 0) {
             await conectarSessao(tokens[0]);
         } else {
-            await gerarNovoLink(null);
+            await gerarNovoLink();
         }
     })();
 })();

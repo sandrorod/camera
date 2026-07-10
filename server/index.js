@@ -65,9 +65,8 @@ app.get('/health', (_req, res) => {
     res.json({ status: 'ok' });
 });
 
-app.post('/api/sessions', (req, res) => {
-    const { expiracaoMinutos } = req.body || {};
-    const sessao = sessionStore.criarSessao(expiracaoMinutos);
+app.post('/api/sessions', (_req, res) => {
+    const sessao = sessionStore.criarSessao();
 
     res.json({
         token: sessao.token,

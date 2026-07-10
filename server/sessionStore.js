@@ -36,13 +36,9 @@ function gerarTokenSeguro() {
         .replace(/=+$/, '');
 }
 
-function criarSessao(expiracaoMinutos) {
+function criarSessao() {
     const token = gerarTokenSeguro();
-    const sessao = criarSessaoComToken(token);
-    if (expiracaoMinutos) {
-        sessao.expiraEm = Date.now() + expiracaoMinutos * 60 * 1000;
-    }
-    return sessao;
+    return criarSessaoComToken(token);
 }
 
 /**
