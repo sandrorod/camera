@@ -75,6 +75,10 @@
         return `${window.location.origin}/camera.html?token=${encodeURIComponent(token)}`;
     }
 
+    function linkVisualizacaoPara(token) {
+        return `${window.location.origin}/watch.html?token=${encodeURIComponent(token)}`;
+    }
+
     function copiarTexto(texto, elBotao) {
         const executarFallback = () => {
             const temp = document.createElement('textarea');
@@ -149,11 +153,15 @@
         const elCard = fragment.querySelector('.camera-card');
         const video = fragment.querySelector('video');
         const elBtnSelecionar = fragment.querySelector('.btn-selecionar-camera');
+        const elBtnCopiarCameraLink = fragment.querySelector('.btn-copiar-camera-link');
         const elBtnDesconectar = fragment.querySelector('.btn-desconectar-camera');
 
         if (cameraId) {
             elBtnSelecionar.addEventListener('click', () => {
                 sessaoUI.connection?.emit('selecionarCameraAtiva', { token: sessaoUI.token, cameraId });
+            });
+            elBtnCopiarCameraLink.addEventListener('click', () => {
+                copiarTexto(linkVisualizacaoPara(sessaoUI.token), elBtnCopiarCameraLink);
             });
             elBtnDesconectar.addEventListener('click', () => {
                 if (!confirm('Desconectar esta câmera? A transmissão dela será encerrada.')) return;
@@ -161,6 +169,7 @@
             });
         } else {
             elBtnSelecionar.disabled = true;
+            elBtnCopiarCameraLink.disabled = true;
             elBtnDesconectar.disabled = true;
         }
 
