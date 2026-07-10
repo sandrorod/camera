@@ -83,7 +83,7 @@
         return `${window.location.origin}/watch.html?token=${encodeURIComponent(token)}&camera=${encodeURIComponent(cameraId)}`;
     }
 
-    function copiarTexto(texto, elBotao) {
+    function copiarTexto(texto, elBotao, mostrarFeedback = mostrarFeedbackCopiado) {
         const executarFallback = () => {
             const temp = document.createElement('textarea');
             temp.value = texto;
@@ -95,7 +95,7 @@
 
         const promessa = navigator.clipboard?.writeText(texto) ?? Promise.reject();
         promessa.catch(executarFallback).finally(() => {
-            if (elBotao) mostrarFeedbackCopiado(elBotao);
+            if (elBotao) mostrarFeedback(elBotao);
         });
     }
 
@@ -105,6 +105,22 @@
 
         const textoOriginal = elBotao.textContent;
         elBotao.textContent = '✅ Copiado!';
+        elBotao.classList.add('btn-copiado');
+
+        setTimeout(() => {
+            elBotao.textContent = textoOriginal;
+            elBotao.classList.remove('btn-copiado');
+            delete elBotao.dataset.feedbackAtivo;
+        }, 1500);
+    }
+
+    /** Mesmo feedback de cópia, mas para botões só-ícone: troca o emoji sem adicionar texto. */
+    function mostrarFeedbackCopiadoIcone(elBotao) {
+        if (elBotao.dataset.feedbackAtivo) return;
+        elBotao.dataset.feedbackAtivo = '1';
+
+        const textoOriginal = elBotao.textContent;
+        elBotao.textContent = '✅';
         elBotao.classList.add('btn-copiado');
 
         setTimeout(() => {
@@ -166,10 +182,10 @@
                 sessaoUI.connection?.emit('selecionarCameraAtiva', { token: sessaoUI.token, cameraId });
             });
             elBtnCopiarCameraIndividual.addEventListener('click', () => {
-                copiarTexto(linkVisualizacaoIndividualPara(sessaoUI.token, cameraId), elBtnCopiarCameraIndividual);
+                copiarTexto(linkVisualizacaoIndividualPara(sessaoUI.token, cameraId), elBtnCopiarCameraIndividual, mostrarFeedbackCopiadoIcone);
             });
             elBtnCopiarCameraLink.addEventListener('click', () => {
-                copiarTexto(linkVisualizacaoPara(sessaoUI.token), elBtnCopiarCameraLink);
+                copiarTexto(linkVisualizacaoPara(sessaoUI.token), elBtnCopiarCameraLink, mostrarFeedbackCopiadoIcone);
             });
             elBtnDesconectar.addEventListener('click', () => {
                 if (!confirm('Desconectar esta câmera? A transmissão dela será encerrada.')) return;
@@ -198,7 +214,7 @@
             const ativa = cameraId === sessaoUI.cameraAtivaId;
             elCard.classList.toggle('camera-card-selecionada', ativa);
             const elBtn = elCard.querySelector('.btn-selecionar-camera');
-            elBtn.textContent = ativa ? '✅ Selecionada' : '✅ Selecionar';
+            elBtn.title = ativa ? 'Câmera selecionada no link único de visualização' : 'Exibir esta câmera no link único de visualização';
             elBtn.classList.toggle('selecionada', ativa);
         });
     }
