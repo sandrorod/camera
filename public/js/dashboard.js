@@ -79,6 +79,10 @@
         return `${window.location.origin}/watch.html?token=${encodeURIComponent(token)}`;
     }
 
+    function linkVisualizacaoIndividualPara(token, cameraId) {
+        return `${window.location.origin}/watch.html?token=${encodeURIComponent(token)}&camera=${encodeURIComponent(cameraId)}`;
+    }
+
     function copiarTexto(texto, elBotao) {
         const executarFallback = () => {
             const temp = document.createElement('textarea');
@@ -153,12 +157,16 @@
         const elCard = fragment.querySelector('.camera-card');
         const video = fragment.querySelector('video');
         const elBtnSelecionar = fragment.querySelector('.btn-selecionar-camera');
+        const elBtnCopiarCameraIndividual = fragment.querySelector('.btn-copiar-camera-individual');
         const elBtnCopiarCameraLink = fragment.querySelector('.btn-copiar-camera-link');
         const elBtnDesconectar = fragment.querySelector('.btn-desconectar-camera');
 
         if (cameraId) {
             elBtnSelecionar.addEventListener('click', () => {
                 sessaoUI.connection?.emit('selecionarCameraAtiva', { token: sessaoUI.token, cameraId });
+            });
+            elBtnCopiarCameraIndividual.addEventListener('click', () => {
+                copiarTexto(linkVisualizacaoIndividualPara(sessaoUI.token, cameraId), elBtnCopiarCameraIndividual);
             });
             elBtnCopiarCameraLink.addEventListener('click', () => {
                 copiarTexto(linkVisualizacaoPara(sessaoUI.token), elBtnCopiarCameraLink);
@@ -169,6 +177,7 @@
             });
         } else {
             elBtnSelecionar.disabled = true;
+            elBtnCopiarCameraIndividual.disabled = true;
             elBtnCopiarCameraLink.disabled = true;
             elBtnDesconectar.disabled = true;
         }

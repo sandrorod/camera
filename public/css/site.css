@@ -542,10 +542,14 @@ html, body {
     top: 8px;
     right: 8px;
     display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     gap: 6px;
+    max-width: calc(100% - 16px);
 }
 
 .btn-selecionar-camera,
+.btn-copiar-camera-individual,
 .btn-copiar-camera-link,
 .btn-desconectar-camera {
     padding: 4px 10px;
@@ -556,9 +560,11 @@ html, body {
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
+    white-space: nowrap;
 }
 
 .btn-selecionar-camera:hover,
+.btn-copiar-camera-individual:hover,
 .btn-copiar-camera-link:hover,
 .btn-desconectar-camera:hover {
     background: rgba(0, 0, 0, 0.8);
