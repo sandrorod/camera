@@ -15,9 +15,6 @@
     const elLinkAtual = document.getElementById('input-link-atual');
     const elBtnCopiarLink = document.getElementById('btn-copiar-link');
     const elBtnQrcodeLink = document.getElementById('btn-qrcode-link');
-    const elLinkAssistir = document.getElementById('input-link-assistir');
-    const elBtnCopiarLinkAssistir = document.getElementById('btn-copiar-link-assistir');
-    const elBtnQrcodeLinkAssistir = document.getElementById('btn-qrcode-link-assistir');
     const elBtnGerarNovoLink = document.getElementById('btn-gerar-novo-link');
     const elQrcodeModal = document.getElementById('qrcode-modal');
     const elQrcodeCanvas = document.getElementById('qrcode-canvas');
@@ -78,10 +75,6 @@
         return `${window.location.origin}/camera.html?token=${encodeURIComponent(token)}`;
     }
 
-    function linkVisualizacaoPara(token) {
-        return `${window.location.origin}/watch.html?token=${encodeURIComponent(token)}`;
-    }
-
     function copiarTexto(texto, elBotao) {
         const executarFallback = () => {
             const temp = document.createElement('textarea');
@@ -115,7 +108,6 @@
 
     function atualizarLinks(token) {
         elLinkAtual.value = linkCameraPara(token);
-        elLinkAssistir.value = linkVisualizacaoPara(token);
     }
 
     function abrirQrcodeModal(link) {
@@ -137,9 +129,7 @@
     }
 
     elBtnCopiarLink.addEventListener('click', () => copiarTexto(elLinkAtual.value, elBtnCopiarLink));
-    elBtnCopiarLinkAssistir.addEventListener('click', () => copiarTexto(elLinkAssistir.value, elBtnCopiarLinkAssistir));
     elBtnQrcodeLink.addEventListener('click', () => abrirQrcodeModal(elLinkAtual.value));
-    elBtnQrcodeLinkAssistir.addEventListener('click', () => abrirQrcodeModal(elLinkAssistir.value));
     elBtnFecharQrcodeModal.addEventListener('click', fecharQrcodeModal);
     elQrcodeModal.querySelector('.qrcode-modal-backdrop').addEventListener('click', fecharQrcodeModal);
     document.addEventListener('keydown', (event) => {
