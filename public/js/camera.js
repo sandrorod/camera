@@ -334,11 +334,6 @@
         // navegadores/drivers já usam esse valor como sinal para não fazer
         // downscale — deixamos explícito para garantir resolução máxima.
         params.encodings[0].scaleResolutionDownBy = 1;
-        // Sob pressão de banda, instrui o codec a preservar a resolução da
-        // imagem (reduzindo o frame rate se necessário) em vez do padrão
-        // 'balanced', que costuma cortar resolução primeiro — prioriza
-        // nitidez, que é o requisito aqui, em detrimento de fluidez.
-        params.degradationPreference = 'maintain-resolution';
 
         try {
             await sender.setParameters(params);
