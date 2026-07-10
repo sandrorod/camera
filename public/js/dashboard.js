@@ -104,7 +104,7 @@
         elBotao.dataset.feedbackAtivo = '1';
 
         const textoOriginal = elBotao.textContent;
-        elBotao.textContent = 'Copiado!';
+        elBotao.textContent = '✅ Copiado!';
         elBotao.classList.add('btn-copiado');
 
         setTimeout(() => {
@@ -198,7 +198,7 @@
             const ativa = cameraId === sessaoUI.cameraAtivaId;
             elCard.classList.toggle('camera-card-selecionada', ativa);
             const elBtn = elCard.querySelector('.btn-selecionar-camera');
-            elBtn.textContent = ativa ? 'Selecionada' : 'Selecionar';
+            elBtn.textContent = ativa ? '✅ Selecionada' : '✅ Selecionar';
             elBtn.classList.toggle('selecionada', ativa);
         });
     }

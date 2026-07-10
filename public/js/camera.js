@@ -178,9 +178,28 @@
         return window.matchMedia('(orientation: portrait)').matches;
     }
 
+    /**
+     * Entra em tela cheia automaticamente quando o celular é girado para
+     * paisagem durante a transmissão, e sai ao voltar para retrato — assim o
+     * preview aproveita a tela toda sem precisar de um botão manual. Ignora
+     * erros: alguns navegadores exigem que a chamada aconteça diretamente
+     * dentro de um gesto do usuário, e nesses casos falha silenciosamente.
+     */
+    function ajustarTelaCheiaPelaOrientacao(vertical) {
+        if (!transmitindo) return;
+
+        if (!vertical && !document.fullscreenElement) {
+            document.documentElement.requestFullscreen?.().catch(() => {});
+        } else if (vertical && document.fullscreenElement) {
+            document.exitFullscreen?.().catch(() => {});
+        }
+    }
+
     let orientacaoAtual = null;
     function notificarOrientacaoSeMudou() {
         const vertical = celularEstaVertical();
+        ajustarTelaCheiaPelaOrientacao(vertical);
+
         if (orientacaoAtual === vertical) return;
         orientacaoAtual = vertical;
 
@@ -191,6 +210,15 @@
 
     screen.orientation?.addEventListener('change', notificarOrientacaoSeMudou);
     window.addEventListener('orientationchange', notificarOrientacaoSeMudou);
+
+    document.addEventListener('fullscreenchange', () => {
+        // Se o usuário sair manualmente da tela cheia (ex: gesto do sistema) e
+        // o celular continuar em paisagem, tenta reentrar — melhor esforço,
+        // pode ser bloqueado pelo navegador fora de um gesto direto do usuário.
+        if (!document.fullscreenElement && transmitindo && !celularEstaVertical()) {
+            document.documentElement.requestFullscreen?.().catch(() => {});
+        }
+    });
 
     function monitorarFpsReal(stream) {
         if (fpsObservadoIntervalId) clearInterval(fpsObservadoIntervalId);
@@ -373,6 +401,10 @@
 
             iniciarHeartbeat();
             await adquirirWakeLock();
+
+            // Chamada dentro do gesto de clique do usuário (obrigatório para a
+            // Fullscreen API funcionar sem exceção em navegadores restritivos).
+            ajustarTelaCheiaPelaOrientacao(celularEstaVertical());
         } catch (erro) {
             console.error('[Câmera] Erro ao iniciar transmissão:', erro);
             definirStatus(`Não foi possível acessar a câmera: ${erro.message}`);
@@ -392,6 +424,10 @@
     async function pararTransmissao(notificarServidor = true) {
         transmitindo = false;
         liberarWakeLock();
+
+        if (document.fullscreenElement) {
+            document.exitFullscreen?.().catch(() => {});
+        }
 
         if (heartbeatIntervalId) {
             clearInterval(heartbeatIntervalId);
