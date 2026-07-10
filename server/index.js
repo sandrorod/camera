@@ -279,6 +279,27 @@ io.on('connection', (socket) => {
         socket.leave(grupoSessao(token));
     });
 
+    // Disparado pelo dashboard ao clicar em "Desconectar" num card: encerra a
+    // transmissão daquela câmera remotamente. O servidor avisa o socket da
+    // própria câmera para que ela pare a captura local (em vez de só derrubar a
+    // conexão), e já limpa o estado da sessão como se a câmera tivesse saído
+    // por conta própria.
+    socket.on('desconectarCamera', ({ token, cameraId }) => {
+        const camera = sessionStore.obterCameraPorCameraId(token, cameraId);
+        if (!camera) {
+            socket.emit('erro', 'Esta câmera não está conectada no momento.');
+            return;
+        }
+
+        io.to(camera.socketId).emit('forcarDesconexao');
+
+        const sessao = sessionStore.removerCameraPorSocketId(camera.socketId);
+        if (sessao) {
+            io.to(grupoSessao(sessao.token)).emit('cameraDesconectada', { socketId: camera.socketId, cameraId });
+            io.to(grupoSessao(sessao.token)).emit('cameraAtivaAtualizada', { cameraId: sessao.cameraAtivaId });
+        }
+    });
+
     socket.on('disconnect', () => {
         const sessaoComoCamera = sessionStore.removerCameraPorSocketId(socket.id);
 

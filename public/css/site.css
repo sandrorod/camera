@@ -537,10 +537,16 @@ html, body {
     font-weight: 600;
 }
 
-.btn-selecionar-camera {
+.camera-card-actions {
     position: absolute;
     top: 8px;
     right: 8px;
+    display: flex;
+    gap: 6px;
+}
+
+.btn-selecionar-camera,
+.btn-desconectar-camera {
     padding: 4px 10px;
     border-radius: 999px;
     border: none;
@@ -551,13 +557,19 @@ html, body {
     cursor: pointer;
 }
 
-.btn-selecionar-camera:hover {
+.btn-selecionar-camera:hover,
+.btn-desconectar-camera:hover {
     background: rgba(0, 0, 0, 0.8);
 }
 
 .btn-selecionar-camera.selecionada {
     background: var(--accent-green);
     color: #06231a;
+}
+
+.btn-desconectar-camera:hover {
+    background: var(--accent-red);
+    color: #2a0a0e;
 }
 
 .camera-card-selecionada {
@@ -616,14 +628,21 @@ html, body {
     background: var(--bg-elevated);
     border: 1px solid var(--border-color);
     border-radius: 16px;
-    max-width: 320px;
+    max-width: 380px;
     width: 100%;
 }
 
 .qrcode-modal-box #qrcode-canvas {
     line-height: 0;
-    border-radius: 6px;
+    border-radius: 8px;
     overflow: hidden;
+    max-width: 100%;
+}
+
+.qrcode-modal-box #qrcode-canvas img,
+.qrcode-modal-box #qrcode-canvas canvas {
+    max-width: 100%;
+    height: auto;
 }
 
 .btn-fechar-modal {

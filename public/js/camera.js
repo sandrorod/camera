@@ -341,6 +341,14 @@
         connection.on('erro', (mensagem) => {
             definirStatus(`Erro: ${mensagem}`);
         });
+
+        // Disparado pelo servidor quando o dashboard clica em "Desconectar" neste
+        // card: encerra a transmissão localmente sem reenviar 'pararTransmissao'
+        // (o servidor já limpou o estado da sessão do lado dele).
+        connection.on('forcarDesconexao', () => {
+            pararTransmissao(false);
+            definirStatus('Transmissão encerrada pelo dashboard.');
+        });
     }
 
     async function iniciarTransmissao() {

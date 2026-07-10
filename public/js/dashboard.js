@@ -122,11 +122,11 @@
         elQrcodeCanvas.innerHTML = '';
         qrcode = new QRCode(elQrcodeCanvas, {
             text: link,
-            width: 200,
-            height: 200,
+            width: 320,
+            height: 320,
             colorDark: '#0b0f14',
             colorLight: '#eef2f6',
-            correctLevel: QRCode.CorrectLevel.M
+            correctLevel: QRCode.CorrectLevel.H
         });
         elQrcodeModal.classList.remove('hidden');
     }
@@ -159,13 +159,19 @@
         const elCard = fragment.querySelector('.camera-card');
         const video = fragment.querySelector('video');
         const elBtnSelecionar = fragment.querySelector('.btn-selecionar-camera');
+        const elBtnDesconectar = fragment.querySelector('.btn-desconectar-camera');
 
         if (cameraId) {
             elBtnSelecionar.addEventListener('click', () => {
                 sessaoUI.connection?.emit('selecionarCameraAtiva', { token: sessaoUI.token, cameraId });
             });
+            elBtnDesconectar.addEventListener('click', () => {
+                if (!confirm('Desconectar esta câmera? A transmissão dela será encerrada.')) return;
+                sessaoUI.connection?.emit('desconectarCamera', { token: sessaoUI.token, cameraId });
+            });
         } else {
             elBtnSelecionar.disabled = true;
+            elBtnDesconectar.disabled = true;
         }
 
         elCamerasGrid.appendChild(fragment);
