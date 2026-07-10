@@ -34,6 +34,7 @@
     const elQualityLabel = document.getElementById('quality-label');
     const elFpsLabel = document.getElementById('fps-label');
     const elStatusMessage = document.getElementById('status-message');
+    const elBannerVideoCongelado = document.getElementById('banner-video-congelado');
 
     /** @type {MediaStream|null} */
     let localStream = null;
@@ -102,8 +103,9 @@
     }, 5000);
 
     document.addEventListener('visibilitychange', () => {
-        if (transmitindo && document.visibilityState === 'visible' && !wakeLock) {
-            adquirirWakeLock();
+        if (transmitindo && document.visibilityState === 'visible') {
+            if (!wakeLock) adquirirWakeLock();
+            verificarSeCongelouAoVoltar();
         }
     });
 
@@ -234,6 +236,68 @@
                 elFpsLabel.textContent = `${Math.round(settings.frameRate)} fps`;
             }
         }, 3000);
+    }
+
+    /**
+     * Android/Chrome costuma pausar a captura de vídeo assim que a aba vai
+     * para segundo plano por tempo prolongado (economia de bateria), mesmo com
+     * a RTCPeerConnection continuando "conectada" e o socket vivo — o vídeo
+     * fica congelado no último frame sem nenhum aviso visível para quem está
+     * transmitindo. Não é possível evitar isso de forma confiável (limitação
+     * de plataforma), mas dá para detectar via requestVideoFrameCallback (novo
+     * frame chegando ou não) e avisar o usuário ao voltar ao app.
+     */
+    let ultimoFrameRecebidoEm = null;
+    let monitorandoCongelamento = false;
+
+    function iniciarMonitoramentoCongelamento() {
+        if (monitorandoCongelamento || !elLocalPreview.requestVideoFrameCallback) return;
+        monitorandoCongelamento = true;
+
+        const registrarFrame = () => {
+            ultimoFrameRecebidoEm = Date.now();
+            if (transmitindo) {
+                elLocalPreview.requestVideoFrameCallback(registrarFrame);
+            } else {
+                monitorandoCongelamento = false;
+            }
+        };
+        elLocalPreview.requestVideoFrameCallback(registrarFrame);
+    }
+
+    /**
+     * Ao voltar de segundo plano, se o último frame recebido é mais antigo que
+     * alguns segundos, o vídeo provavelmente congelou enquanto a aba estava em
+     * background — mostra o aviso. O aviso some sozinho assim que um frame
+     * novo chegar (prova de que a captura foi retomada).
+     */
+    const LIMITE_CONGELAMENTO_MS = 4000;
+
+    function verificarSeCongelouAoVoltar() {
+        if (!transmitindo || ultimoFrameRecebidoEm === null) return;
+
+        const tempoDesdeUltimoFrame = Date.now() - ultimoFrameRecebidoEm;
+        if (tempoDesdeUltimoFrame > LIMITE_CONGELAMENTO_MS) {
+            mostrarAvisoVideoCongelado();
+        }
+    }
+
+    function mostrarAvisoVideoCongelado() {
+        if (!elBannerVideoCongelado.classList.contains('hidden')) return;
+
+        elBannerVideoCongelado.classList.remove('hidden');
+        navigator.vibrate?.([200, 100, 200]);
+
+        // O primeiro frame após o congelamento normalmente já estava enfileirado
+        // antes da aba voltar ao foreground, então não prova por si só que a
+        // captura foi retomada — espera mais um frame subsequente antes de
+        // esconder o aviso, para reduzir a chance de escondê-lo cedo demais.
+        const marcarFrameOk = () => {
+            elLocalPreview.requestVideoFrameCallback(() => {
+                elBannerVideoCongelado.classList.add('hidden');
+            });
+        };
+        elLocalPreview.requestVideoFrameCallback(marcarFrameOk);
     }
 
     /**
@@ -410,6 +474,7 @@
 
             iniciarHeartbeat();
             await adquirirWakeLock();
+            iniciarMonitoramentoCongelamento();
 
             // Chamada dentro do gesto de clique do usuário (obrigatório para a
             // Fullscreen API funcionar sem exceção em navegadores restritivos).
@@ -433,6 +498,8 @@
     async function pararTransmissao(notificarServidor = true) {
         transmitindo = false;
         liberarWakeLock();
+        ultimoFrameRecebidoEm = null;
+        elBannerVideoCongelado.classList.add('hidden');
 
         if (document.fullscreenElement) {
             document.exitFullscreen?.().catch(() => {});
