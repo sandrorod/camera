@@ -248,10 +248,10 @@
      */
     function bitrateMaximoParaResolucao(largura, altura) {
         const pixels = largura * altura;
-        if (pixels >= 3840 * 2160) return 12_000_000;  // 4K
-        if (pixels >= 1920 * 1080) return 6_000_000;   // Full HD
-        if (pixels >= 1280 * 720) return 3_000_000;    // HD
-        return 1_200_000;                               // SD
+        if (pixels >= 3840 * 2160) return 20_000_000;  // 4K
+        if (pixels >= 1920 * 1080) return 10_000_000;  // Full HD
+        if (pixels >= 1280 * 720) return 5_000_000;    // HD
+        return 2_000_000;                               // SD
     }
 
     async function aplicarBitrateMaximo(pc) {
@@ -266,6 +266,15 @@
             params.encodings = [{}];
         }
         params.encodings[0].maxBitrate = maxBitrate;
+        // Sem isso, o scaleResolutionDownBy fica implícito em 1, mas alguns
+        // navegadores/drivers já usam esse valor como sinal para não fazer
+        // downscale — deixamos explícito para garantir resolução máxima.
+        params.encodings[0].scaleResolutionDownBy = 1;
+        // Sob pressão de banda, instrui o codec a preservar a resolução da
+        // imagem (reduzindo o frame rate se necessário) em vez do padrão
+        // 'balanced', que costuma cortar resolução primeiro — prioriza
+        // nitidez, que é o requisito aqui, em detrimento de fluidez.
+        params.degradationPreference = 'maintain-resolution';
 
         try {
             await sender.setParameters(params);
