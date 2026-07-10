@@ -17,6 +17,7 @@
         </header>
 
         <section class="share-section">
+            <label class="field-label">Link para conectar câmeras</label>
             <div class="share-link-row">
                 <input id="input-link-atual" class="session-link-input" type="text" readonly />
                 <button id="btn-copiar-link" class="btn btn-secondary btn-small">Copiar</button>
@@ -33,6 +34,13 @@
 
                 <button type="submit" class="btn btn-primary">Gerar novo link</button>
             </form>
+
+            <label class="field-label">Link para assistir (mesmo para todas as câmeras)</label>
+            <div class="share-link-row">
+                <input id="input-link-assistir" class="session-link-input" type="text" readonly />
+                <button id="btn-copiar-link-assistir" class="btn btn-secondary btn-small">Copiar</button>
+            </div>
+            <p class="qrcode-hint">Esse link sempre mostra a câmera marcada como "Selecionada" abaixo. Clique em "Selecionar" no card para trocar.</p>
         </section>
 
         <main class="dashboard-main">
@@ -52,7 +60,7 @@
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5C21.3 7.6 17 4.5 12 4.5zm0 12.5a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
                 <span class="camera-card-viewers-count">0</span>
             </span>
-            <button class="btn-copy-camera-link" title="Copiar link desta câmera">Copiar link</button>
+            <button class="btn-selecionar-camera" title="Exibir esta câmera no link de visualização">Selecionar</button>
         </div>
     </template>
 

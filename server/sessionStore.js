@@ -25,6 +25,7 @@ const sessoes = new Map();
  * @property {number} ultimaAtividade
  * @property {number|null} expiraEm
  * @property {boolean} ativa
+ * @property {string|null} cameraAtivaId - cameraId exibido no link de visualização único da sessão
  */
 
 function gerarTokenSeguro() {
@@ -69,7 +70,8 @@ function criarSessaoComToken(token) {
         criadaEm: agora,
         ultimaAtividade: agora,
         expiraEm: null,
-        ativa: true
+        ativa: true,
+        cameraAtivaId: null
     };
     sessoes.set(token, sessao);
     return sessao;
@@ -90,7 +92,32 @@ function adicionarCamera(token, cameraId, socketId) {
         vertical: existente?.vertical ?? null
     });
     sessao.ultimaAtividade = Date.now();
+
+    // Se não há câmera ativa selecionada para o link de visualização único,
+    // a primeira a se conectar assume esse papel automaticamente.
+    if (!sessao.cameraAtivaId) {
+        sessao.cameraAtivaId = cameraId;
+    }
+
     return sessao;
+}
+
+/**
+ * Define qual câmera é exibida no link de visualização único da sessão
+ * (watch.html?token=...). Retorna a sessão atualizada, ou null se a sessão ou
+ * a câmera não existirem.
+ */
+function definirCameraAtiva(token, cameraId) {
+    const sessao = obterSessao(token);
+    if (!sessao || !sessao.cameras.has(cameraId)) return null;
+    sessao.cameraAtivaId = cameraId;
+    return sessao;
+}
+
+function obterCameraAtiva(token) {
+    const sessao = obterSessao(token);
+    if (!sessao || !sessao.cameraAtivaId) return null;
+    return sessao.cameras.get(sessao.cameraAtivaId) || null;
 }
 
 function atualizarOrientacaoCamera(token, cameraId, vertical) {
@@ -105,6 +132,14 @@ function removerCameraPorSocketId(socketId) {
         for (const cam of sessao.cameras.values()) {
             if (cam.socketId === socketId) {
                 sessao.cameras.delete(cam.cameraId);
+
+                // Se a câmera removida era a ativa no link único, promove outra
+                // câmera ainda conectada (se houver) para não deixar o link órfão.
+                if (sessao.cameraAtivaId === cam.cameraId) {
+                    const proxima = sessao.cameras.values().next().value;
+                    sessao.cameraAtivaId = proxima ? proxima.cameraId : null;
+                }
+
                 return sessao;
             }
         }
@@ -230,6 +265,8 @@ module.exports = {
     obterSessao,
     sessaoExpirada,
     adicionarCamera,
+    definirCameraAtiva,
+    obterCameraAtiva,
     atualizarOrientacaoCamera,
     removerCameraPorSocketId,
     listarCameras,

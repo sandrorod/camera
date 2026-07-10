@@ -14,6 +14,8 @@
     const elEmptyState = document.getElementById('empty-state');
     const elLinkAtual = document.getElementById('input-link-atual');
     const elBtnCopiarLink = document.getElementById('btn-copiar-link');
+    const elLinkAssistir = document.getElementById('input-link-assistir');
+    const elBtnCopiarLinkAssistir = document.getElementById('btn-copiar-link-assistir');
     const elQrcodeCanvas = document.getElementById('qrcode-canvas');
     const templateCameraCard = document.getElementById('template-camera-card');
 
@@ -48,6 +50,7 @@
      * @property {Map<string, HTMLVideoElement>} videoElements
      * @property {Map<string, string>} cameraIds - socketId -> cameraId persistente
      * @property {Map<string, HTMLElement>} camerasPorId - cameraId -> elemento .camera-card
+     * @property {string|null} cameraAtivaId - cameraId exibido no link de visualização único
      */
 
     async function carregarTokensSalvos() {
@@ -70,8 +73,8 @@
         return `${window.location.origin}/camera.html?token=${encodeURIComponent(token)}`;
     }
 
-    function linkVisualizacaoPara(token, cameraId) {
-        return `${window.location.origin}/watch.html?token=${encodeURIComponent(token)}&camera=${encodeURIComponent(cameraId)}`;
+    function linkVisualizacaoPara(token) {
+        return `${window.location.origin}/watch.html?token=${encodeURIComponent(token)}`;
     }
 
     function copiarTexto(texto, elBotao) {
@@ -108,6 +111,7 @@
     function atualizarLinkEQrcode(token) {
         const link = linkCameraPara(token);
         elLinkAtual.value = link;
+        elLinkAssistir.value = linkVisualizacaoPara(token);
 
         elQrcodeCanvas.innerHTML = '';
         qrcode = new QRCode(elQrcodeCanvas, {
@@ -121,6 +125,7 @@
     }
 
     elBtnCopiarLink.addEventListener('click', () => copiarTexto(elLinkAtual.value, elBtnCopiarLink));
+    elBtnCopiarLinkAssistir.addEventListener('click', () => copiarTexto(elLinkAssistir.value, elBtnCopiarLinkAssistir));
 
     function limparCamerasUI() {
         elCamerasGrid.innerHTML = '';
@@ -134,21 +139,35 @@
         const fragment = templateCameraCard.content.cloneNode(true);
         const elCard = fragment.querySelector('.camera-card');
         const video = fragment.querySelector('video');
-        const elBtnCopiarCamera = fragment.querySelector('.btn-copy-camera-link');
+        const elBtnSelecionar = fragment.querySelector('.btn-selecionar-camera');
 
         if (cameraId) {
-            elBtnCopiarCamera.addEventListener('click', () => copiarTexto(linkVisualizacaoPara(sessaoUI.token, cameraId), elBtnCopiarCamera));
+            elBtnSelecionar.addEventListener('click', () => {
+                sessaoUI.connection?.emit('selecionarCameraAtiva', { token: sessaoUI.token, cameraId });
+            });
         } else {
-            elBtnCopiarCamera.disabled = true;
+            elBtnSelecionar.disabled = true;
         }
 
         elCamerasGrid.appendChild(fragment);
         elCard.dataset.socketId = cameraSocketId;
+        if (cameraId) elCard.dataset.cameraId = cameraId;
 
         sessaoUI.videoElements.set(cameraSocketId, video);
         if (cameraId) sessaoUI.camerasPorId.set(cameraId, elCard);
         atualizarEmptyState();
+        atualizarMarcacaoCameraAtiva(sessaoUI);
         return video;
+    }
+
+    function atualizarMarcacaoCameraAtiva(sessaoUI) {
+        sessaoUI.camerasPorId.forEach((elCard, cameraId) => {
+            const ativa = cameraId === sessaoUI.cameraAtivaId;
+            elCard.classList.toggle('camera-card-selecionada', ativa);
+            const elBtn = elCard.querySelector('.btn-selecionar-camera');
+            elBtn.textContent = ativa ? 'Selecionada' : 'Selecionar';
+            elBtn.classList.toggle('selecionada', ativa);
+        });
     }
 
     function removerCardCamera(sessaoUI, cameraSocketId) {
@@ -228,7 +247,8 @@
             peerConnections: new Map(),
             videoElements: new Map(),
             cameraIds: new Map(),
-            camerasPorId: new Map()
+            camerasPorId: new Map(),
+            cameraAtivaId: null
         };
         sessaoAtual = sessaoUI;
 
@@ -262,6 +282,11 @@
 
         connection.on('orientacaoCameraAtualizada', ({ cameraId, vertical }) => {
             atualizarOrientacaoCamera(sessaoUI, cameraId, vertical);
+        });
+
+        connection.on('cameraAtivaAtualizada', ({ cameraId }) => {
+            sessaoUI.cameraAtivaId = cameraId;
+            atualizarMarcacaoCameraAtiva(sessaoUI);
         });
 
         connection.on('receberOffer', async ({ senderSocketId, sdpOffer }) => {

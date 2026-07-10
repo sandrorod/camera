@@ -11,3 +11,4 @@ npm-debug.log*
 ## Variáveis de ambiente locais
 .env
 .env.local
+.env*

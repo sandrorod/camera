@@ -20,11 +20,13 @@
     <script>
         const params = new URLSearchParams(window.location.search);
         const token = params.get('token');
+        // cameraId é opcional: se ausente, a página segue automaticamente a
+        // câmera marcada como "Selecionada" no dashboard (link único por sessão).
         const cameraId = params.get('camera');
 
-        if (!token || !cameraId) {
-            document.body.innerHTML = '<div class="viewer-message-screen"><h1>Link inválido</h1><p>Este link não identifica uma câmera válida.</p></div>';
-            throw new Error('Token ou cameraId ausente na URL.');
+        if (!token) {
+            document.body.innerHTML = '<div class="viewer-message-screen"><h1>Link inválido</h1><p>Este link não identifica uma sessão válida.</p></div>';
+            throw new Error('Token ausente na URL.');
         }
 
         window.__SECURITYCAM_CONFIG__ = {

@@ -548,7 +548,7 @@ html, body {
     font-weight: 600;
 }
 
-.btn-copy-camera-link {
+.btn-selecionar-camera {
     position: absolute;
     top: 8px;
     right: 8px;
@@ -562,8 +562,18 @@ html, body {
     cursor: pointer;
 }
 
-.btn-copy-camera-link:hover {
+.btn-selecionar-camera:hover {
     background: rgba(0, 0, 0, 0.8);
+}
+
+.btn-selecionar-camera.selecionada {
+    background: var(--accent-green);
+    color: #06231a;
+}
+
+.camera-card-selecionada {
+    outline: 2px solid var(--accent-green);
+    outline-offset: -2px;
 }
 
 .btn-copiado {
@@ -572,6 +582,13 @@ html, body {
 }
 
 /* ----- Link ativo e QR code ----- */
+
+.field-label {
+    display: block;
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin: 4px 0 -4px;
+}
 
 .qrcode-box {
     display: flex;

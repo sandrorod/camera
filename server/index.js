@@ -118,6 +118,7 @@ io.on('connection', (socket) => {
 
         socket.join(grupoSessao(token));
         socket.cameraId = cameraId;
+        const eraCameraAtiva = sessao.cameraAtivaId;
         sessionStore.adicionarCamera(token, cameraId, socket.id);
         db.registrarCamera(token, cameraId, null).catch((erro) => console.error('[db] Falha ao registrar câmera:', erro));
 
@@ -133,6 +134,13 @@ io.on('connection', (socket) => {
             io.to(dashboardSocketId).emit('novaCameraConectada', { socketId: socket.id, cameraId });
             socket.emit('novoEspectador', dashboardSocketId);
         });
+
+        // Primeira câmera a conectar na sessão assume automaticamente o papel de
+        // câmera ativa (exibida no link único de visualização) — avisa dashboards
+        // e qualquer observador que já esteja no link único aguardando uma câmera.
+        if (!eraCameraAtiva && sessao.cameraAtivaId === cameraId) {
+            io.to(grupoSessao(token)).emit('cameraAtivaAtualizada', { cameraId });
+        }
     });
 
     socket.on('entrarComoObservador', ({ token, cameraId }) => {
@@ -143,27 +151,68 @@ io.on('connection', (socket) => {
             return;
         }
 
-        const camera = sessionStore.obterCameraPorCameraId(token, cameraId);
+        // Sem cameraId explícito (link único de visualização): observa a câmera
+        // atualmente selecionada como ativa na sessão pelo dashboard.
+        const cameraIdAlvo = cameraId || sessionStore.obterCameraAtiva(token)?.cameraId;
+        const camera = cameraIdAlvo ? sessionStore.obterCameraPorCameraId(token, cameraIdAlvo) : null;
         if (!camera) {
-            socket.emit('erro', 'Esta câmera não está conectada no momento.');
+            socket.emit('erro', 'Nenhuma câmera conectada no momento.');
             return;
         }
 
         socket.join(grupoSessao(token));
         socket.token = token;
-        socket.observandoCameraId = cameraId;
-        sessionStore.adicionarObservador(token, cameraId, socket.id);
+        socket.seguindoCameraAtiva = !cameraId;
+        socket.observandoCameraId = cameraIdAlvo;
+        sessionStore.adicionarObservador(token, cameraIdAlvo, socket.id);
 
-        console.log(`[Observador conectado] token=${token} cameraId=${cameraId} socketId=${socket.id}`);
+        console.log(`[Observador conectado] token=${token} cameraId=${cameraIdAlvo} socketId=${socket.id}`);
 
         // Pede à câmera específica que envie o Offer a este observador.
         io.to(camera.socketId).emit('novoEspectador', socket.id);
+        socket.emit('cameraAtivaAtualizada', { cameraId: cameraIdAlvo });
 
         if (camera.vertical !== null) {
-            socket.emit('orientacaoCameraAtualizada', { cameraId, vertical: camera.vertical });
+            socket.emit('orientacaoCameraAtualizada', { cameraId: cameraIdAlvo, vertical: camera.vertical });
         }
 
-        notificarContagemObservadores(token, cameraId);
+        notificarContagemObservadores(token, cameraIdAlvo);
+    });
+
+    // Disparado pelo dashboard ao clicar em "Selecionar" num card: define qual
+    // câmera o link único de visualização (watch.html?token=...) exibe, e migra
+    // todos os observadores que estavam seguindo a câmera ativa (sem cameraId
+    // fixo na URL) para a nova câmera.
+    socket.on('selecionarCameraAtiva', ({ token, cameraId }) => {
+        const sessao = sessionStore.definirCameraAtiva(token, cameraId);
+        if (!sessao) {
+            socket.emit('erro', 'Câmera inválida ou não conectada.');
+            return;
+        }
+
+        const camera = sessionStore.obterCameraPorCameraId(token, cameraId);
+
+        io.in(grupoSessao(token)).fetchSockets().then((sockets) => {
+            sockets.forEach((s) => {
+                if (!s.seguindoCameraAtiva || s.observandoCameraId === cameraId) return;
+
+                sessionStore.removerObservadorPorSocketId(s.id);
+                s.observandoCameraId = cameraId;
+                sessionStore.adicionarObservador(token, cameraId, s.id);
+
+                io.to(camera.socketId).emit('novoEspectador', s.id);
+                s.emit('cameraAtivaAtualizada', { cameraId });
+                if (camera.vertical !== null) {
+                    s.emit('orientacaoCameraAtualizada', { cameraId, vertical: camera.vertical });
+                }
+            });
+
+            notificarContagemObservadores(token, cameraId);
+        });
+
+        sessionStore.listarDashboards(token).forEach((dashboardSocketId) => {
+            io.to(dashboardSocketId).emit('cameraAtivaAtualizada', { cameraId });
+        });
     });
 
     socket.on('entrarComoDashboard', (token) => {
@@ -194,6 +243,11 @@ io.on('connection', (socket) => {
                 socket.emit('orientacaoCameraAtualizada', { cameraId: cam.cameraId, vertical: cam.vertical });
             }
         });
+
+        const cameraAtiva = sessionStore.obterCameraAtiva(token);
+        if (cameraAtiva) {
+            socket.emit('cameraAtivaAtualizada', { cameraId: cameraAtiva.cameraId });
+        }
     });
 
     socket.on('enviarOffer', ({ targetSocketId, sdpOffer }) => {
@@ -221,6 +275,7 @@ io.on('connection', (socket) => {
         const sessao = sessionStore.removerCameraPorSocketId(socket.id);
         if (sessao) {
             io.to(grupoSessao(sessao.token)).emit('cameraDesconectada', { socketId: socket.id, cameraId: socket.cameraId });
+            io.to(grupoSessao(sessao.token)).emit('cameraAtivaAtualizada', { cameraId: sessao.cameraAtivaId });
         }
         socket.leave(grupoSessao(token));
     });
@@ -230,6 +285,7 @@ io.on('connection', (socket) => {
 
         if (sessaoComoCamera) {
             io.to(grupoSessao(sessaoComoCamera.token)).emit('cameraDesconectada', { socketId: socket.id, cameraId: socket.cameraId });
+            io.to(grupoSessao(sessaoComoCamera.token)).emit('cameraAtivaAtualizada', { cameraId: sessaoComoCamera.cameraAtivaId });
             console.log(`[Câmera desconectada] token=${sessaoComoCamera.token} cameraId=${socket.cameraId} socketId=${socket.id}`);
             return;
         }

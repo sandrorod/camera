@@ -1,8 +1,12 @@
 // watch.js
-// Controla a página de visualização individual: conecta-se via Socket.io como
-// observador de UMA câmera específica (identificada por cameraId, estável entre
-// reconexões), recebe o Offer SDP dela, responde com Answer, troca ICE Candidates
-// e exibe o vídeo recebido via WebRTC em tela cheia, sem nenhum outro elemento de UI.
+// Controla a página de visualização: conecta-se via Socket.io como observador de
+// uma câmera (identificada por cameraId, estável entre reconexões), recebe o
+// Offer SDP dela, responde com Answer, troca ICE Candidates e exibe o vídeo
+// recebido via WebRTC em tela cheia, sem nenhum outro elemento de UI.
+// Se a URL não trouxer cameraId (link único de visualização, compartilhado por
+// todas as câmeras da sessão), o servidor decide qual câmera mostrar — a marcada
+// como "Selecionada" no dashboard — e pode trocá-la a qualquer momento via
+// 'cameraAtivaAtualizada', sem que o espectador precise trocar de link.
 
 (function () {
     const config = window.__SECURITYCAM_CONFIG__;
@@ -13,6 +17,7 @@
     let connection = null;
     let peerConnection = null;
     let cameraSocketId = null;
+    let cameraIdAtual = config.cameraId || null;
     let iceConfig = { stunServers: [], turnServers: [] };
 
     function definirOverlay(mensagem) {
@@ -109,18 +114,38 @@
         });
 
         connection.on('orientacaoCameraAtualizada', ({ cameraId, vertical }) => {
-            if (cameraId !== config.cameraId) return;
+            if (cameraId !== cameraIdAtual) return;
             elRemoteVideo.classList.toggle('remote-video-vertical', vertical);
         });
 
         connection.on('cameraDesconectada', ({ cameraId }) => {
-            if (cameraId !== config.cameraId) return;
+            if (cameraId !== cameraIdAtual) return;
             if (peerConnection) {
                 peerConnection.close();
                 peerConnection = null;
             }
             elRemoteVideo.srcObject = null;
             definirOverlay('A câmera foi desconectada.');
+        });
+
+        // Só se aplica ao link único (sem cameraId fixo na URL): o servidor avisa
+        // quando a câmera selecionada no dashboard muda, e a página troca de
+        // stream automaticamente, sem precisar recarregar.
+        connection.on('cameraAtivaAtualizada', ({ cameraId }) => {
+            if (config.cameraId || cameraId === cameraIdAtual) return;
+
+            cameraIdAtual = cameraId;
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            elRemoteVideo.srcObject = null;
+
+            if (!cameraId) {
+                definirOverlay('Nenhuma câmera conectada no momento.');
+            } else {
+                definirOverlay('Conectando à câmera...');
+            }
         });
 
         connection.on('erro', (mensagem) => {
@@ -131,7 +156,7 @@
 
     function entrarComoObservador(conexaoAtual) {
         const conn = conexaoAtual || connection;
-        conn.emit('entrarComoObservador', { token: config.token, cameraId: config.cameraId });
+        conn.emit('entrarComoObservador', { token: config.token, cameraId: config.cameraId || undefined });
     }
 
     configurarSocket();
