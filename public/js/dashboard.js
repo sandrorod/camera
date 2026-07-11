@@ -201,7 +201,11 @@
 
         if (cameraId) {
             elBtnSelecionar.addEventListener('click', () => {
-                sessaoUI.connection?.emit('selecionarCameraAtiva', { token: sessaoUI.token, cameraId });
+                // Clicar na câmera já selecionada deseleciona (envia null),
+                // mesmo sem outra câmera para assumir o lugar — o link único
+                // fica sem câmera ativa até uma nova seleção.
+                const jaEstaAtiva = cameraId === sessaoUI.cameraAtivaId;
+                sessaoUI.connection?.emit('selecionarCameraAtiva', { token: sessaoUI.token, cameraId: jaEstaAtiva ? null : cameraId });
             });
             elBtnCopiarCameraIndividual.addEventListener('click', () => {
                 copiarTexto(linkVisualizacaoIndividualPara(sessaoUI.token, cameraId), elBtnCopiarCameraIndividual, mostrarFeedbackCopiadoIcone);

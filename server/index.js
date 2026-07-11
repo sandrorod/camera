@@ -183,7 +183,9 @@ io.on('connection', (socket) => {
     // Disparado pelo dashboard ao clicar em "Selecionar" num card: define qual
     // câmera o link único de visualização (watch.html?token=...) exibe, e migra
     // todos os observadores que estavam seguindo a câmera ativa (sem cameraId
-    // fixo na URL) para a nova câmera.
+    // fixo na URL) para a nova câmera. cameraId null deselecionar — clicar de
+    // novo na câmera já ativa a tira da seleção, mesmo sem outra câmera para
+    // assumir o lugar, deixando o link único sem câmera até uma nova escolha.
     socket.on('selecionarCameraAtiva', ({ token, cameraId }) => {
         const sessao = sessionStore.definirCameraAtiva(token, cameraId);
         if (!sessao) {
@@ -191,7 +193,7 @@ io.on('connection', (socket) => {
             return;
         }
 
-        const camera = sessionStore.obterCameraPorCameraId(token, cameraId);
+        const camera = cameraId ? sessionStore.obterCameraPorCameraId(token, cameraId) : null;
 
         io.in(grupoSessao(token)).fetchSockets().then((sockets) => {
             sockets.forEach((s) => {
@@ -199,16 +201,18 @@ io.on('connection', (socket) => {
 
                 sessionStore.removerObservadorPorSocketId(s.id);
                 s.observandoCameraId = cameraId;
-                sessionStore.adicionarObservador(token, cameraId, s.id);
+                if (cameraId) sessionStore.adicionarObservador(token, cameraId, s.id);
 
-                io.to(camera.socketId).emit('novoEspectador', s.id);
                 s.emit('cameraAtivaAtualizada', { cameraId });
-                if (camera.vertical !== null) {
-                    s.emit('orientacaoCameraAtualizada', { cameraId, vertical: camera.vertical });
+                if (camera) {
+                    io.to(camera.socketId).emit('novoEspectador', s.id);
+                    if (camera.vertical !== null) {
+                        s.emit('orientacaoCameraAtualizada', { cameraId, vertical: camera.vertical });
+                    }
                 }
             });
 
-            notificarContagemObservadores(token, cameraId);
+            if (cameraId) notificarContagemObservadores(token, cameraId);
         });
 
         sessionStore.listarDashboards(token).forEach((dashboardSocketId) => {

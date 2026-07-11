@@ -103,12 +103,15 @@ function adicionarCamera(token, cameraId, socketId, nome, time) {
 
 /**
  * Define qual câmera é exibida no link de visualização único da sessão
- * (watch.html?token=...). Retorna a sessão atualizada, ou null se a sessão ou
- * a câmera não existirem.
+ * (watch.html?token=...). cameraId null limpa a seleção (nenhuma câmera
+ * ativa) — usado ao "deselecionar" a câmera atualmente ativa. Retorna a
+ * sessão atualizada, ou null se a sessão não existir ou a câmera informada
+ * (quando não-null) não estiver conectada.
  */
 function definirCameraAtiva(token, cameraId) {
     const sessao = obterSessao(token);
-    if (!sessao || !sessao.cameras.has(cameraId)) return null;
+    if (!sessao) return null;
+    if (cameraId !== null && !sessao.cameras.has(cameraId)) return null;
     sessao.cameraAtivaId = cameraId;
     return sessao;
 }
