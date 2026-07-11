@@ -182,6 +182,7 @@
         }
 
         const fragment = templateCameraCard.content.cloneNode(true);
+        const elWrapper = fragment.querySelector('.camera-card-wrapper');
         const elCard = fragment.querySelector('.camera-card');
         const video = fragment.querySelector('video');
         const elTorcedor = fragment.querySelector('.camera-card-torcedor');
@@ -226,30 +227,30 @@
         }
 
         elCamerasGrid.appendChild(fragment);
-        elCard.dataset.socketId = cameraSocketId;
-        if (cameraId) elCard.dataset.cameraId = cameraId;
+        elWrapper.dataset.socketId = cameraSocketId;
+        if (cameraId) elWrapper.dataset.cameraId = cameraId;
 
         sessaoUI.videoElements.set(cameraSocketId, video);
-        if (cameraId) sessaoUI.camerasPorId.set(cameraId, elCard);
+        if (cameraId) sessaoUI.camerasPorId.set(cameraId, elWrapper);
         atualizarEmptyState();
         atualizarMarcacaoCameraAtiva(sessaoUI);
         return video;
     }
 
     function atualizarMarcacaoCameraAtiva(sessaoUI) {
-        sessaoUI.camerasPorId.forEach((elCard, cameraId) => {
+        sessaoUI.camerasPorId.forEach((elWrapper, cameraId) => {
             const ativa = cameraId === sessaoUI.cameraAtivaId;
-            elCard.classList.toggle('camera-card-selecionada', ativa);
-            const elBtn = elCard.querySelector('.btn-selecionar-camera');
+            elWrapper.querySelector('.camera-card').classList.toggle('camera-card-selecionada', ativa);
+            const elBtn = elWrapper.querySelector('.btn-selecionar-camera');
             elBtn.title = ativa ? 'Câmera selecionada no link único de visualização' : 'Exibir esta câmera no link único de visualização';
             elBtn.classList.toggle('selecionada', ativa);
         });
     }
 
     function atualizarMarcacaoSilenciada(sessaoUI, cameraId, silenciada) {
-        const elCard = sessaoUI.camerasPorId.get(cameraId);
-        if (!elCard) return;
-        const elBtn = elCard.querySelector('.btn-silenciar-camera');
+        const elWrapper = sessaoUI.camerasPorId.get(cameraId);
+        if (!elWrapper) return;
+        const elBtn = elWrapper.querySelector('.btn-silenciar-camera');
         elBtn.textContent = silenciada ? '🔇' : '🔊';
         elBtn.title = silenciada ? 'Reativar áudio para quem está assistindo' : 'Silenciar áudio para quem está assistindo';
         elBtn.classList.toggle('silenciada', silenciada);

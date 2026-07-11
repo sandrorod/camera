@@ -547,6 +547,12 @@ html, body {
     gap: 12px;
 }
 
+.camera-card-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
 .camera-card {
     position: relative;
     aspect-ratio: 16 / 9;
@@ -618,14 +624,11 @@ html, body {
 }
 
 .camera-card-actions {
-    position: absolute;
-    top: 8px;
-    right: 8px;
     display: flex;
     flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 6px;
-    max-width: calc(100% - 16px);
+    justify-content: center;
+    gap: 8px;
+    padding: 4px 0;
 }
 
 .btn-selecionar-camera,
@@ -634,14 +637,14 @@ html, body {
 .btn-silenciar-camera,
 .btn-chat-camera,
 .btn-desconectar-camera {
-    width: 30px;
-    height: 30px;
+    width: 34px;
+    height: 34px;
     padding: 0;
     border-radius: 50%;
-    border: none;
-    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid var(--border-color);
+    background: var(--bg-elevated);
     color: var(--text-primary);
-    font-size: 14px;
+    font-size: 15px;
     line-height: 1;
     display: flex;
     align-items: center;
@@ -655,7 +658,7 @@ html, body {
 .btn-silenciar-camera:hover,
 .btn-chat-camera:hover,
 .btn-desconectar-camera:hover {
-    background: rgba(0, 0, 0, 0.8);
+    background: var(--bg-secondary);
 }
 
 .btn-selecionar-camera.selecionada {
