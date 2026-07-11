@@ -18,7 +18,7 @@ const sessoes = new Map();
 /**
  * @typedef {Object} Sessao
  * @property {string} token
- * @property {Map<string, { cameraId: string, socketId: string, conectadaEm: number, vertical: boolean|null }>} cameras - chave: cameraId
+ * @property {Map<string, { cameraId: string, socketId: string, conectadaEm: number, vertical: boolean|null, silenciada: boolean }>} cameras - chave: cameraId
  * @property {Set<string>} dashboards
  * @property {Map<string, Set<string>>} observadoresPorCamera - cameraId -> socketIds assistindo via watch.html
  * @property {number} criadaEm
@@ -85,7 +85,8 @@ function adicionarCamera(token, cameraId, socketId) {
         cameraId,
         socketId,
         conectadaEm: Date.now(),
-        vertical: existente?.vertical ?? null
+        vertical: existente?.vertical ?? null,
+        silenciada: existente?.silenciada ?? false
     });
     sessao.ultimaAtividade = Date.now();
 
@@ -121,6 +122,18 @@ function atualizarOrientacaoCamera(token, cameraId, vertical) {
     const cam = sessao?.cameras.get(cameraId);
     if (!cam) return;
     cam.vertical = vertical;
+}
+
+/**
+ * Alterna se o áudio da câmera é enviado aos observadores (link único e
+ * individual). Retorna o novo estado, ou null se a câmera não existir.
+ */
+function alternarSilenciada(token, cameraId) {
+    const sessao = obterSessao(token);
+    const cam = sessao?.cameras.get(cameraId);
+    if (!cam) return null;
+    cam.silenciada = !cam.silenciada;
+    return cam.silenciada;
 }
 
 function removerCameraPorSocketId(socketId) {
@@ -264,6 +277,7 @@ module.exports = {
     definirCameraAtiva,
     obterCameraAtiva,
     atualizarOrientacaoCamera,
+    alternarSilenciada,
     removerCameraPorSocketId,
     listarCameras,
     obterCameraPorCameraId,

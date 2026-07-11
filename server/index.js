@@ -241,6 +241,10 @@ io.on('connection', (socket) => {
             if (cam.vertical !== null) {
                 socket.emit('orientacaoCameraAtualizada', { cameraId: cam.cameraId, vertical: cam.vertical });
             }
+
+            if (cam.silenciada) {
+                socket.emit('cameraSilenciadaAtualizada', { cameraId: cam.cameraId, silenciada: true });
+            }
         });
 
         const cameraAtiva = sessionStore.obterCameraAtiva(token);
@@ -268,6 +272,23 @@ io.on('connection', (socket) => {
     socket.on('orientacaoAtualizada', ({ token, vertical }) => {
         sessionStore.atualizarOrientacaoCamera(token, socket.cameraId, vertical);
         io.to(grupoSessao(token)).emit('orientacaoCameraAtualizada', { cameraId: socket.cameraId, vertical });
+    });
+
+    // Disparado pelo dashboard ao clicar em "Silenciar" num card: pede à
+    // própria câmera que desabilite a track de áudio local, o que interrompe
+    // o envio de áudio para TODOS os peers já conectados (dashboard, link
+    // único e qualquer link individual) sem precisar renegociar cada
+    // RTCPeerConnection individualmente.
+    socket.on('alternarSilenciarCamera', ({ token, cameraId }) => {
+        const novoEstado = sessionStore.alternarSilenciada(token, cameraId);
+        if (novoEstado === null) {
+            socket.emit('erro', 'Esta câmera não está conectada no momento.');
+            return;
+        }
+
+        const camera = sessionStore.obterCameraPorCameraId(token, cameraId);
+        io.to(camera.socketId).emit('definirSilenciada', novoEstado);
+        io.to(grupoSessao(token)).emit('cameraSilenciadaAtualizada', { cameraId, silenciada: novoEstado });
     });
 
     socket.on('pararTransmissao', (token) => {

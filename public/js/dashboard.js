@@ -175,6 +175,7 @@
         const elBtnSelecionar = fragment.querySelector('.btn-selecionar-camera');
         const elBtnCopiarCameraIndividual = fragment.querySelector('.btn-copiar-camera-individual');
         const elBtnCopiarCameraLink = fragment.querySelector('.btn-copiar-camera-link');
+        const elBtnSilenciar = fragment.querySelector('.btn-silenciar-camera');
         const elBtnDesconectar = fragment.querySelector('.btn-desconectar-camera');
 
         if (cameraId) {
@@ -187,6 +188,9 @@
             elBtnCopiarCameraLink.addEventListener('click', () => {
                 copiarTexto(linkVisualizacaoPara(sessaoUI.token), elBtnCopiarCameraLink, mostrarFeedbackCopiadoIcone);
             });
+            elBtnSilenciar.addEventListener('click', () => {
+                sessaoUI.connection?.emit('alternarSilenciarCamera', { token: sessaoUI.token, cameraId });
+            });
             elBtnDesconectar.addEventListener('click', () => {
                 if (!confirm('Desconectar esta câmera? A transmissão dela será encerrada.')) return;
                 sessaoUI.connection?.emit('desconectarCamera', { token: sessaoUI.token, cameraId });
@@ -195,6 +199,7 @@
             elBtnSelecionar.disabled = true;
             elBtnCopiarCameraIndividual.disabled = true;
             elBtnCopiarCameraLink.disabled = true;
+            elBtnSilenciar.disabled = true;
             elBtnDesconectar.disabled = true;
         }
 
@@ -217,6 +222,15 @@
             elBtn.title = ativa ? 'Câmera selecionada no link único de visualização' : 'Exibir esta câmera no link único de visualização';
             elBtn.classList.toggle('selecionada', ativa);
         });
+    }
+
+    function atualizarMarcacaoSilenciada(sessaoUI, cameraId, silenciada) {
+        const elCard = sessaoUI.camerasPorId.get(cameraId);
+        if (!elCard) return;
+        const elBtn = elCard.querySelector('.btn-silenciar-camera');
+        elBtn.textContent = silenciada ? '🔇' : '🔊';
+        elBtn.title = silenciada ? 'Reativar áudio para quem está assistindo' : 'Silenciar áudio para quem está assistindo';
+        elBtn.classList.toggle('silenciada', silenciada);
     }
 
     function removerCardCamera(sessaoUI, cameraSocketId) {
@@ -336,6 +350,10 @@
         connection.on('cameraAtivaAtualizada', ({ cameraId }) => {
             sessaoUI.cameraAtivaId = cameraId;
             atualizarMarcacaoCameraAtiva(sessaoUI);
+        });
+
+        connection.on('cameraSilenciadaAtualizada', ({ cameraId, silenciada }) => {
+            atualizarMarcacaoSilenciada(sessaoUI, cameraId, silenciada);
         });
 
         connection.on('receberOffer', async ({ senderSocketId, sdpOffer }) => {

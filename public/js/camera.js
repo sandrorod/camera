@@ -445,6 +445,17 @@
             pararTransmissao(false);
             definirStatus('Transmissão encerrada pelo dashboard.');
         });
+
+        // Disparado pelo servidor quando o dashboard clica em "Silenciar" neste
+        // card: desabilitar a track (em vez de removê-la) interrompe o áudio
+        // para todos os peers já conectados sem precisar renegociar cada
+        // RTCPeerConnection — a track continua existindo, só para de enviar.
+        connection.on('definirSilenciada', (silenciada) => {
+            localStream?.getAudioTracks().forEach((track) => {
+                track.enabled = !silenciada;
+            });
+            definirStatus(silenciada ? 'Áudio silenciado pelo dashboard.' : 'Áudio reativado pelo dashboard.');
+        });
     }
 
     async function iniciarTransmissao() {

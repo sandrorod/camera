@@ -564,6 +564,7 @@ html, body {
 .btn-selecionar-camera,
 .btn-copiar-camera-individual,
 .btn-copiar-camera-link,
+.btn-silenciar-camera,
 .btn-desconectar-camera {
     width: 30px;
     height: 30px;
@@ -583,6 +584,7 @@ html, body {
 .btn-selecionar-camera:hover,
 .btn-copiar-camera-individual:hover,
 .btn-copiar-camera-link:hover,
+.btn-silenciar-camera:hover,
 .btn-desconectar-camera:hover {
     background: rgba(0, 0, 0, 0.8);
 }
@@ -590,6 +592,11 @@ html, body {
 .btn-selecionar-camera.selecionada {
     background: var(--accent-green);
     color: #06231a;
+}
+
+.btn-silenciar-camera.silenciada {
+    background: var(--accent-amber);
+    color: #2a1a00;
 }
 
 .btn-desconectar-camera:hover {
