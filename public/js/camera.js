@@ -25,11 +25,9 @@
 
     const elLocalPreview = document.getElementById('local-preview');
     const elConnectionOverlay = document.getElementById('connection-overlay');
-    const elRecIndicator = document.getElementById('rec-indicator');
     const elBtnStart = document.getElementById('btn-start');
     const elBtnStop = document.getElementById('btn-stop');
     const elBtnSwitchCamera = document.getElementById('btn-switch-camera');
-    const elSelectResolution = document.getElementById('select-resolution');
     const elQualityLabel = document.getElementById('quality-label');
     const elFpsLabel = document.getElementById('fps-label');
     const elStatusMessage = document.getElementById('status-message');
@@ -147,22 +145,14 @@
 
     /**
      * Solicita permissão de câmera/microfone e inicia o preview local,
-     * tentando a maior resolução suportada a partir da seleção do usuário.
+     * tentando a maior resolução suportada (4K, com fallback decrescente até
+     * SD) — sem seleção manual, a UI sempre busca a melhor qualidade possível.
      */
     async function iniciarCaptura() {
-        const resolucaoSelecionada = resolucaoSelecionadaParaObjeto(elSelectResolution.value);
-
-        const indiceInicial = RESOLUCOES_PADRAO.findIndex(
-            (r) => r.width === resolucaoSelecionada.width && r.height === resolucaoSelecionada.height
-        );
-        const ordemTentativas = indiceInicial >= 0
-            ? RESOLUCOES_PADRAO.slice(indiceInicial)
-            : RESOLUCOES_PADRAO;
-
         elConnectionOverlay.classList.remove('hidden');
         elConnectionOverlay.querySelector('p').textContent = 'Solicitando permissão da câmera...';
 
-        const { stream, resolucao } = await obterMelhorStreamDisponivel(ordemTentativas, facingModeAtual, FPS_PADRAO);
+        const { stream, resolucao } = await obterMelhorStreamDisponivel(RESOLUCOES_PADRAO, facingModeAtual, FPS_PADRAO);
 
         localStream = stream;
         elLocalPreview.srcObject = stream;
@@ -524,7 +514,6 @@
             connection.emit('entrarComoCamera', { token: config.token, cameraId, ...obterDadosTorcedor() });
 
             transmitindo = true;
-            elRecIndicator.classList.remove('hidden');
             elBtnStart.classList.add('hidden');
             elBtnStop.classList.remove('hidden');
             definirStatus('Transmissão iniciada. A câmera já aparece no dashboard.');
@@ -584,7 +573,6 @@
         // continuar "ao vivo" mesmo após a transmissão real ter encerrado.
         elLocalPreview.srcObject = null;
 
-        elRecIndicator.classList.add('hidden');
         elBtnStart.classList.remove('hidden');
         elBtnStart.disabled = false;
         elBtnStop.classList.add('hidden');
@@ -599,13 +587,7 @@
         const streamAntigo = localStream;
         streamAntigo.getTracks().forEach((track) => track.stop());
 
-        const resolucaoSelecionada = resolucaoSelecionadaParaObjeto(elSelectResolution.value);
-        const indiceInicial = RESOLUCOES_PADRAO.findIndex(
-            (r) => r.width === resolucaoSelecionada.width && r.height === resolucaoSelecionada.height
-        );
-        const ordemTentativas = indiceInicial >= 0 ? RESOLUCOES_PADRAO.slice(indiceInicial) : RESOLUCOES_PADRAO;
-
-        const { stream } = await obterMelhorStreamDisponivel(ordemTentativas, facingModeAtual, FPS_PADRAO);
+        const { stream } = await obterMelhorStreamDisponivel(RESOLUCOES_PADRAO, facingModeAtual, FPS_PADRAO);
         localStream = stream;
         elLocalPreview.srcObject = stream;
         monitorarFpsReal(stream);

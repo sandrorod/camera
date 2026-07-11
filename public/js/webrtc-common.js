@@ -100,8 +100,3 @@ const RESOLUCOES_PADRAO = [
     { width: 1280, height: 720 },  // HD
     { width: 640, height: 480 }    // SD
 ];
-
-function resolucaoSelecionadaParaObjeto(valorSelect) {
-    const [width, height] = valorSelect.split('x').map(Number);
-    return { width, height };
-}

@@ -9,14 +9,6 @@
 </head>
 <body>
     <div class="page page-broadcaster">
-        <header class="topbar">
-            <div class="topbar-left">
-                <span id="rec-indicator" class="rec-indicator hidden">
-                    <span class="rec-dot"></span> AO VIVO
-                </span>
-            </div>
-        </header>
-
         <div id="banner-video-congelado" class="banner-alerta hidden">
             ⚠️ A transmissão pode ter congelado enquanto o app estava em segundo plano. Volte a deixar esta tela em primeiro plano para retomar.
         </div>
@@ -43,18 +35,6 @@
                 <button id="btn-start" class="btn btn-primary">Iniciar Transmissão</button>
                 <button id="btn-stop" class="btn btn-danger hidden">Parar Transmissão</button>
                 <button id="btn-switch-camera" class="btn btn-secondary">Alternar Câmera</button>
-            </div>
-
-            <div class="controls-row controls-row-select">
-                <label class="select-field">
-                    <span>Resolução</span>
-                    <select id="select-resolution">
-                        <option value="3840x2160">4K (3840x2160)</option>
-                        <option value="1920x1080" selected>Full HD (1920x1080)</option>
-                        <option value="1280x720">HD (1280x720)</option>
-                        <option value="640x480">SD (640x480)</option>
-                    </select>
-                </label>
             </div>
 
             <div class="controls-row controls-row-select">
