@@ -356,14 +356,14 @@
         elCard.querySelector('.camera-card-viewers-count').textContent = String(quantidade);
     }
 
-    function atualizarOrientacaoCamera(sessaoUI, cameraId, vertical) {
+    function atualizarOrientacaoCamera(sessaoUI, cameraId, vertical, invertido) {
         const elWrapper = sessaoUI.camerasPorId.get(cameraId);
         if (!elWrapper) return;
         elWrapper.querySelector('.camera-card').classList.toggle('camera-card-vertical', vertical);
-        // A câmera em paisagem sai sempre de cabeça para baixo neste app
-        // (não é distinção primary/secondary — ver camera.js), corrigido
-        // girando o vídeo 180° sempre que a orientação não for vertical.
-        elWrapper.querySelector('video').classList.toggle('camera-card-video-invertido', !vertical);
+        // invertido só vem true para celular/tablet em paisagem — a própria
+        // câmera decide isso (ver ehDispositivoMovel em camera.js), já que
+        // webcam de PC não sofre desse problema mesmo sendo sempre paisagem.
+        elWrapper.querySelector('video').classList.toggle('camera-card-video-invertido', !!invertido);
     }
 
     function criarPeerConnectionParaCamera(sessaoUI, iceConfig, cameraSocketId) {
@@ -452,8 +452,8 @@
             atualizarContagemObservadores(sessaoUI, cameraId, quantidade);
         });
 
-        connection.on('orientacaoCameraAtualizada', ({ cameraId, vertical }) => {
-            atualizarOrientacaoCamera(sessaoUI, cameraId, vertical);
+        connection.on('orientacaoCameraAtualizada', ({ cameraId, vertical, invertido }) => {
+            atualizarOrientacaoCamera(sessaoUI, cameraId, vertical, invertido);
         });
 
         connection.on('cameraAtivaAtualizada', ({ cameraId }) => {

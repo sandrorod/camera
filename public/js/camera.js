@@ -192,6 +192,21 @@
     }
 
     /**
+     * A correção de rotação em paisagem só vale para celular/tablet — a
+     * webcam de um computador é sempre "paisagem" por natureza (não tem
+     * sensor de rotação), e aplicar a mesma correção nela deixava a imagem
+     * de cabeça para baixo desnecessariamente. userAgentData.mobile é a
+     * forma mais direta de checar; o fallback por regex de user agent cobre
+     * navegadores que ainda não suportam essa API.
+     */
+    function ehDispositivoMovel() {
+        if (typeof navigator.userAgentData?.mobile === 'boolean') {
+            return navigator.userAgentData.mobile;
+        }
+        return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    }
+
+    /**
      * Entra em tela cheia automaticamente quando o celular é girado para
      * paisagem durante a transmissão, e sai ao voltar para retrato — assim o
      * preview aproveita a tela toda sem precisar de um botão manual. Ignora
@@ -217,7 +232,10 @@
         orientacaoAtual = vertical;
 
         if (connection && connection.connected) {
-            connection.emit('orientacaoAtualizada', { token: config.token, vertical });
+            // invertido só é relevante em paisagem, e só em dispositivo móvel
+            // (webcam de PC não sofre desse problema — ver ehDispositivoMovel).
+            const invertido = !vertical && ehDispositivoMovel();
+            connection.emit('orientacaoAtualizada', { token: config.token, vertical, invertido });
         }
     }
 

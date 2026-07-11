@@ -174,7 +174,7 @@ io.on('connection', (socket) => {
         socket.emit('cameraAtivaAtualizada', { cameraId: cameraIdAlvo });
 
         if (camera.vertical !== null) {
-            socket.emit('orientacaoCameraAtualizada', { cameraId: cameraIdAlvo, vertical: camera.vertical });
+            socket.emit('orientacaoCameraAtualizada', { cameraId: cameraIdAlvo, vertical: camera.vertical, invertido: camera.invertido });
         }
 
         notificarContagemObservadores(token, cameraIdAlvo);
@@ -207,7 +207,7 @@ io.on('connection', (socket) => {
                 if (camera) {
                     io.to(camera.socketId).emit('novoEspectador', s.id);
                     if (camera.vertical !== null) {
-                        s.emit('orientacaoCameraAtualizada', { cameraId, vertical: camera.vertical });
+                        s.emit('orientacaoCameraAtualizada', { cameraId, vertical: camera.vertical, invertido: camera.invertido });
                     }
                 }
             });
@@ -252,7 +252,7 @@ io.on('connection', (socket) => {
             socket.emit('contagemObservadoresAtualizada', { cameraId: cam.cameraId, quantidade });
 
             if (cam.vertical !== null) {
-                socket.emit('orientacaoCameraAtualizada', { cameraId: cam.cameraId, vertical: cam.vertical });
+                socket.emit('orientacaoCameraAtualizada', { cameraId: cam.cameraId, vertical: cam.vertical, invertido: cam.invertido });
             }
 
             if (cam.silenciada) {
@@ -282,9 +282,9 @@ io.on('connection', (socket) => {
         sessionStore.atualizarAtividade(token);
     });
 
-    socket.on('orientacaoAtualizada', ({ token, vertical }) => {
-        sessionStore.atualizarOrientacaoCamera(token, socket.cameraId, vertical);
-        io.to(grupoSessao(token)).emit('orientacaoCameraAtualizada', { cameraId: socket.cameraId, vertical });
+    socket.on('orientacaoAtualizada', ({ token, vertical, invertido }) => {
+        sessionStore.atualizarOrientacaoCamera(token, socket.cameraId, vertical, invertido);
+        io.to(grupoSessao(token)).emit('orientacaoCameraAtualizada', { cameraId: socket.cameraId, vertical, invertido });
     });
 
     // Disparado pelo dashboard ao clicar em "Silenciar" num card: pede à

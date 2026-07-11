@@ -113,12 +113,12 @@
             }
         });
 
-        connection.on('orientacaoCameraAtualizada', ({ cameraId, vertical }) => {
+        connection.on('orientacaoCameraAtualizada', ({ cameraId, vertical, invertido }) => {
             if (cameraId !== cameraIdAtual) return;
             elRemoteVideo.classList.toggle('remote-video-vertical', vertical);
-            // A câmera em paisagem sai sempre de cabeça para baixo neste app
-            // (ver camera.js) — corrigido girando 180° o vídeo remoto.
-            elRemoteVideo.classList.toggle('remote-video-invertido', !vertical);
+            // invertido só vem true para celular/tablet em paisagem — ver
+            // ehDispositivoMovel em camera.js (webcam de PC não precisa disso).
+            elRemoteVideo.classList.toggle('remote-video-invertido', !!invertido);
         });
 
         connection.on('cameraDesconectada', ({ cameraId }) => {
