@@ -351,10 +351,10 @@
     }
 
     function atualizarOrientacaoCamera(sessaoUI, cameraId, vertical, invertido) {
-        const elCard = sessaoUI.camerasPorId.get(cameraId);
-        if (!elCard) return;
-        elCard.classList.toggle('camera-card-vertical', vertical);
-        elCard.querySelector('video').classList.toggle('camera-card-video-invertido', !!invertido);
+        const elWrapper = sessaoUI.camerasPorId.get(cameraId);
+        if (!elWrapper) return;
+        elWrapper.querySelector('.camera-card').classList.toggle('camera-card-vertical', vertical);
+        elWrapper.querySelector('video').classList.toggle('camera-card-video-invertido', !!invertido);
     }
 
     function criarPeerConnectionParaCamera(sessaoUI, iceConfig, cameraSocketId) {

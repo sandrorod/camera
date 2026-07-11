@@ -568,8 +568,13 @@ html, body {
     object-fit: cover;
 }
 
-.camera-card-vertical video {
-    object-fit: contain;
+/* Acompanha a orientação real do dispositivo que está transmitindo: o card
+   muda de proporção (em vez de só ajustar object-fit) para que a miniatura
+   fique vertical quando a câmera está vertical, sem barras pretas. */
+.camera-card-vertical {
+    aspect-ratio: 9 / 16;
+    max-width: 360px;
+    margin: 0 auto;
 }
 
 .camera-card-video-invertido {
