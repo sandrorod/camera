@@ -153,6 +153,10 @@ html, body {
     object-fit: contain;
 }
 
+.remote-video-invertido {
+    transform: rotate(180deg);
+}
+
 /* ----- Viewer stage: ocupa a tela inteira, sem nenhum outro elemento de UI ----- */
 
 .viewer-stage-fullscreen {
@@ -244,6 +248,66 @@ html, body {
     border-radius: var(--radius);
     padding: 8px 10px;
     font-size: 14px;
+}
+
+.torcedor-section {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.torcedor-section-titulo {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.torcedor-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.torcedor-field {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+}
+
+.torcedor-field:focus-within {
+    border-color: var(--accent-green);
+}
+
+.torcedor-field-icone {
+    font-size: 16px;
+    line-height: 1;
+    flex: 0 0 auto;
+}
+
+.torcedor-field input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.torcedor-field input:focus {
+    outline: none;
+}
+
+.torcedor-field input::placeholder {
+    color: var(--text-secondary);
 }
 
 .btn {
@@ -574,6 +638,10 @@ html, body {
     object-fit: cover;
 }
 
+.camera-card-video-invertido {
+    transform: rotate(180deg);
+}
+
 .camera-card-label {
     position: absolute;
     bottom: 8px;
@@ -848,18 +916,23 @@ html, body {
 }
 
 .chat-mensagem {
+    align-self: flex-start;
     max-width: 80%;
     padding: 8px 12px;
     border-radius: 12px;
-    background: var(--bg-secondary);
+    border-bottom-left-radius: 4px;
+    background: var(--bg-elevated);
+    color: var(--text-primary);
     font-size: 13px;
     word-break: break-word;
 }
 
-.chat-mensagem-dashboard {
+.chat-mensagem-propria {
     align-self: flex-end;
-    background: var(--accent-blue);
-    color: #061a33;
+    border-radius: 12px;
+    border-bottom-right-radius: 4px;
+    background: var(--accent-green);
+    color: #06231a;
 }
 
 .chat-mensagem-hora {

@@ -37,16 +37,19 @@
                 <button id="btn-switch-camera" class="btn btn-secondary">Alternar Câmera</button>
             </div>
 
-            <div class="controls-row controls-row-select">
-                <label class="select-field">
-                    <span>Seu nome</span>
-                    <input type="text" id="input-nome-torcedor" placeholder="Ex: João" maxlength="60" />
-                </label>
+            <div class="torcedor-section">
+                <p class="torcedor-section-titulo">🙌 Quem está transmitindo?</p>
+                <div class="torcedor-fields">
+                    <label class="torcedor-field">
+                        <span class="torcedor-field-icone">👤</span>
+                        <input type="text" id="input-nome-torcedor" placeholder="Seu nome" maxlength="60" />
+                    </label>
 
-                <label class="select-field">
-                    <span>Torcendo pra</span>
-                    <input type="text" id="input-time-torcedor" placeholder="Ex: Flamengo" maxlength="60" />
-                </label>
+                    <label class="torcedor-field">
+                        <span class="torcedor-field-icone">⚽</span>
+                        <input type="text" id="input-time-torcedor" placeholder="Torcendo pra qual time" maxlength="60" />
+                    </label>
+                </div>
             </div>
 
             <p id="status-message" class="status-message"></p>

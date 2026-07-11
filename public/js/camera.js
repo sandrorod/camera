@@ -176,13 +176,13 @@
      * que gira a imagem na exibição via metadata, não a resolução em si. Por
      * isso a orientação real precisa vir de screen.orientation.
      *
-     * Não é possível distinguir de forma confiável "de cabeça para baixo"
-     * (landscape-secondary) de "normal" (landscape-primary) — isso varia por
-     * fabricante/dispositivo e já tentamos aplicar rotate(180deg) baseado
-     * nisso, mas causava a imagem virar de cabeça para baixo justamente na
-     * orientação que deveria estar correta. O WebRTC/navegador já lida com a
-     * rotação real do vídeo nativamente via metadata da track; aqui só se
-     * distingue vertical/horizontal, sem tentar corrigir inversão.
+     * Neste app o retrato (vertical) já sai correto nativamente via WebRTC,
+     * mas a paisagem (landscape) sai sempre de cabeça para baixo nos dois
+     * sentidos de rotação — não é um caso de landscape-primary vs
+     * landscape-secondary (já testamos essa distinção e não bate com o
+     * comportamento real observado), é a orientação paisagem como um todo
+     * que precisa da correção. Por isso a rotação de 180° é aplicada sempre
+     * que o celular estiver em paisagem, independente do sentido do giro.
      */
     function celularEstaVertical() {
         if (screen.orientation?.type) {
@@ -615,7 +615,9 @@
     function renderizarMensagemChat(mensagem) {
         const fragment = templateChatMensagem.content.cloneNode(true);
         const elMensagem = fragment.querySelector('.chat-mensagem');
-        elMensagem.classList.toggle('chat-mensagem-dashboard', mensagem.remetente === 'dashboard');
+        // No padrão WhatsApp, a própria mensagem fica à direita — deste lado
+        // (câmera), "própria" é remetente === 'camera'.
+        elMensagem.classList.toggle('chat-mensagem-propria', mensagem.remetente === 'camera');
         elMensagem.querySelector('.chat-mensagem-texto').textContent = mensagem.texto;
         elMensagem.querySelector('.chat-mensagem-hora').textContent = formatarHora(mensagem.enviadaEm);
         elChatMensagens.appendChild(fragment);

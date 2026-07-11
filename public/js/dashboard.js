@@ -263,7 +263,9 @@
     function renderizarMensagemChat(mensagem) {
         const fragment = templateChatMensagem.content.cloneNode(true);
         const elMensagem = fragment.querySelector('.chat-mensagem');
-        elMensagem.classList.toggle('chat-mensagem-dashboard', mensagem.remetente === 'dashboard');
+        // No padrão WhatsApp, a própria mensagem fica à direita — deste lado
+        // (dashboard), "própria" é remetente === 'dashboard'.
+        elMensagem.classList.toggle('chat-mensagem-propria', mensagem.remetente === 'dashboard');
         elMensagem.querySelector('.chat-mensagem-texto').textContent = mensagem.texto;
         elMensagem.querySelector('.chat-mensagem-hora').textContent = formatarHora(mensagem.enviadaEm);
         elChatMensagens.appendChild(fragment);
@@ -354,6 +356,10 @@
         const elWrapper = sessaoUI.camerasPorId.get(cameraId);
         if (!elWrapper) return;
         elWrapper.querySelector('.camera-card').classList.toggle('camera-card-vertical', vertical);
+        // A câmera em paisagem sai sempre de cabeça para baixo neste app
+        // (não é distinção primary/secondary — ver camera.js), corrigido
+        // girando o vídeo 180° sempre que a orientação não for vertical.
+        elWrapper.querySelector('video').classList.toggle('camera-card-video-invertido', !vertical);
     }
 
     function criarPeerConnectionParaCamera(sessaoUI, iceConfig, cameraSocketId) {
