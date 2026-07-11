@@ -153,10 +153,6 @@ html, body {
     object-fit: contain;
 }
 
-.remote-video-invertido {
-    transform: rotate(180deg);
-}
-
 /* ----- Viewer stage: ocupa a tela inteira, sem nenhum outro elemento de UI ----- */
 
 .viewer-stage-fullscreen {
@@ -301,6 +297,7 @@ html, body {
 
 .share-link-row {
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
 }
 
@@ -503,8 +500,17 @@ html, body {
 
 .dashboard-title {
     font-size: 18px;
+    font-weight: 800;
     margin: 0 0 0 8px;
     display: inline;
+}
+
+.brand-max {
+    color: var(--accent-red);
+}
+
+.brand-live {
+    color: var(--text-primary);
 }
 
 .share-section {
@@ -518,8 +524,8 @@ html, body {
 
 #btn-gerar-novo-link {
     flex: 0;
-    align-self: flex-start;
-    min-width: 160px;
+    min-width: 130px;
+    white-space: nowrap;
 }
 
 .dashboard-main {
@@ -566,10 +572,6 @@ html, body {
     width: 100%;
     height: 100%;
     object-fit: cover;
-}
-
-.camera-card-video-invertido {
-    transform: rotate(180deg);
 }
 
 .camera-card-label {

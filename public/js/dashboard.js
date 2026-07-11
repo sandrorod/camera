@@ -350,11 +350,10 @@
         elCard.querySelector('.camera-card-viewers-count').textContent = String(quantidade);
     }
 
-    function atualizarOrientacaoCamera(sessaoUI, cameraId, vertical, invertido) {
+    function atualizarOrientacaoCamera(sessaoUI, cameraId, vertical) {
         const elWrapper = sessaoUI.camerasPorId.get(cameraId);
         if (!elWrapper) return;
         elWrapper.querySelector('.camera-card').classList.toggle('camera-card-vertical', vertical);
-        elWrapper.querySelector('video').classList.toggle('camera-card-video-invertido', !!invertido);
     }
 
     function criarPeerConnectionParaCamera(sessaoUI, iceConfig, cameraSocketId) {
@@ -443,8 +442,8 @@
             atualizarContagemObservadores(sessaoUI, cameraId, quantidade);
         });
 
-        connection.on('orientacaoCameraAtualizada', ({ cameraId, vertical, invertido }) => {
-            atualizarOrientacaoCamera(sessaoUI, cameraId, vertical, invertido);
+        connection.on('orientacaoCameraAtualizada', ({ cameraId, vertical }) => {
+            atualizarOrientacaoCamera(sessaoUI, cameraId, vertical);
         });
 
         connection.on('cameraAtivaAtualizada', ({ cameraId }) => {

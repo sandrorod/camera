@@ -176,28 +176,19 @@
      * que gira a imagem na exibição via metadata, não a resolução em si. Por
      * isso a orientação real precisa vir de screen.orientation.
      *
-     * Um booleano vertical/horizontal não é suficiente: existem 4 estados
-     * físicos (portrait-primary, portrait-secondary, landscape-primary,
-     * landscape-secondary), e os dois "secondary" são o mesmo eixo girado
-     * 180° — é isso que causava a imagem de cabeça para baixo quando o
-     * celular era virado nesse sentido, já que antes só se distinguia
-     * vertical/horizontal, nunca o lado invertido.
+     * Não é possível distinguir de forma confiável "de cabeça para baixo"
+     * (landscape-secondary) de "normal" (landscape-primary) — isso varia por
+     * fabricante/dispositivo e já tentamos aplicar rotate(180deg) baseado
+     * nisso, mas causava a imagem virar de cabeça para baixo justamente na
+     * orientação que deveria estar correta. O WebRTC/navegador já lida com a
+     * rotação real do vídeo nativamente via metadata da track; aqui só se
+     * distingue vertical/horizontal, sem tentar corrigir inversão.
      */
-    function obterOrientacaoTela() {
+    function celularEstaVertical() {
         if (screen.orientation?.type) {
-            return screen.orientation.type; // 'portrait-primary' | 'portrait-secondary' | 'landscape-primary' | 'landscape-secondary'
+            return screen.orientation.type.startsWith('portrait');
         }
-        // Fallback sem acesso a screen.orientation: só dá pra saber o eixo
-        // (retrato/paisagem), nunca se está invertido — assume o lado normal.
-        return window.matchMedia('(orientation: portrait)').matches ? 'portrait-primary' : 'landscape-primary';
-    }
-
-    function celularEstaVertical(orientacao = obterOrientacaoTela()) {
-        return orientacao.startsWith('portrait');
-    }
-
-    function celularEstaInvertido(orientacao = obterOrientacaoTela()) {
-        return orientacao.endsWith('secondary');
+        return window.matchMedia('(orientation: portrait)').matches;
     }
 
     /**
@@ -219,16 +210,14 @@
 
     let orientacaoAtual = null;
     function notificarOrientacaoSeMudou() {
-        const tipoOrientacao = obterOrientacaoTela();
-        const vertical = celularEstaVertical(tipoOrientacao);
-        const invertido = celularEstaInvertido(tipoOrientacao);
+        const vertical = celularEstaVertical();
         ajustarTelaCheiaPelaOrientacao(vertical);
 
-        if (orientacaoAtual === tipoOrientacao) return;
-        orientacaoAtual = tipoOrientacao;
+        if (orientacaoAtual === vertical) return;
+        orientacaoAtual = vertical;
 
         if (connection && connection.connected) {
-            connection.emit('orientacaoAtualizada', { token: config.token, vertical, invertido });
+            connection.emit('orientacaoAtualizada', { token: config.token, vertical });
         }
     }
 

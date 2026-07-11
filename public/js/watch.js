@@ -113,10 +113,9 @@
             }
         });
 
-        connection.on('orientacaoCameraAtualizada', ({ cameraId, vertical, invertido }) => {
+        connection.on('orientacaoCameraAtualizada', ({ cameraId, vertical }) => {
             if (cameraId !== cameraIdAtual) return;
             elRemoteVideo.classList.toggle('remote-video-vertical', vertical);
-            elRemoteVideo.classList.toggle('remote-video-invertido', !!invertido);
         });
 
         connection.on('cameraDesconectada', ({ cameraId }) => {
