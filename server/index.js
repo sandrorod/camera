@@ -107,7 +107,7 @@ app.get('/api/ice-config', (_req, res) => {
 // ----- Socket.io (signaling) -----
 
 io.on('connection', (socket) => {
-    socket.on('entrarComoCamera', ({ token, cameraId }) => {
+    socket.on('entrarComoCamera', ({ token, cameraId, nome, time }) => {
         const sessao = sessionStore.obterSessao(token);
 
         if (!sessao || !sessao.ativa || sessionStore.sessaoExpirada(sessao)) {
@@ -118,19 +118,21 @@ io.on('connection', (socket) => {
         socket.join(grupoSessao(token));
         socket.cameraId = cameraId;
         const eraCameraAtiva = sessao.cameraAtivaId;
-        sessionStore.adicionarCamera(token, cameraId, socket.id);
-        db.registrarCamera(token, cameraId, null).catch((erro) => console.error('[db] Falha ao registrar câmera:', erro));
+        sessionStore.adicionarCamera(token, cameraId, socket.id, nome, time);
+        db.registrarCamera(token, cameraId, nome).catch((erro) => console.error('[db] Falha ao registrar câmera:', erro));
 
         console.log(`[Câmera conectada] token=${token} cameraId=${cameraId} socketId=${socket.id}`);
 
         socket.emit('cameraConfirmada', token);
+
+        const cam = sessionStore.obterCameraPorCameraId(token, cameraId);
 
         // Avisa cada dashboard já conectado para que crie um card, e pede à própria
         // câmera que envie o Offer a cada um deles — a câmera é quem inicia o Offer
         // (papel mantido do antigo broadcaster, só troca o destinatário de
         // "espectador" para "dashboard").
         sessionStore.listarDashboards(token).forEach((dashboardSocketId) => {
-            io.to(dashboardSocketId).emit('novaCameraConectada', { socketId: socket.id, cameraId });
+            io.to(dashboardSocketId).emit('novaCameraConectada', { socketId: socket.id, cameraId, nome: cam.nome, time: cam.time });
             socket.emit('novoEspectador', dashboardSocketId);
         });
 
@@ -212,6 +214,13 @@ io.on('connection', (socket) => {
         sessionStore.listarDashboards(token).forEach((dashboardSocketId) => {
             io.to(dashboardSocketId).emit('cameraAtivaAtualizada', { cameraId });
         });
+
+        // Avisa todas as câmeras da sessão (não só a que virou ativa) para que
+        // cada uma saiba se deve mostrar ou esconder o banner "no ar" — a que
+        // perdeu a seleção também precisa escurecer o próprio indicador.
+        sessionStore.listarCameras(token).forEach((cam) => {
+            io.to(cam.socketId).emit('cameraAtivaAtualizada', { cameraId });
+        });
     });
 
     socket.on('entrarComoDashboard', (token) => {
@@ -232,7 +241,7 @@ io.on('connection', (socket) => {
         // visualização) e pede a cada uma que (re)envie Offer a este dashboard —
         // cobre o caso de o dashboard ter recarregado a página com câmeras já ativas.
         camerasAtivas.forEach((cam) => {
-            socket.emit('novaCameraConectada', { socketId: cam.socketId, cameraId: cam.cameraId });
+            socket.emit('novaCameraConectada', { socketId: cam.socketId, cameraId: cam.cameraId, nome: cam.nome, time: cam.time });
             io.to(cam.socketId).emit('novoEspectador', socket.id);
 
             const quantidade = sessionStore.contarObservadores(token, cam.cameraId);
@@ -289,6 +298,38 @@ io.on('connection', (socket) => {
         const camera = sessionStore.obterCameraPorCameraId(token, cameraId);
         io.to(camera.socketId).emit('definirSilenciada', novoEstado);
         io.to(grupoSessao(token)).emit('cameraSilenciadaAtualizada', { cameraId, silenciada: novoEstado });
+    });
+
+    // Chat individual entre o dashboard e cada câmera, isolado por cameraId —
+    // mensagens de uma câmera nunca aparecem na conversa de outra. Efêmero
+    // (sem persistência em banco), como o resto do estado da sessão.
+    socket.on('enviarMensagemChat', ({ token, cameraId, remetente, texto }) => {
+        const textoLimpo = String(texto || '').trim().slice(0, 500);
+        if (!textoLimpo) return;
+
+        const mensagem = { cameraId, remetente, texto: textoLimpo, enviadaEm: Date.now() };
+
+        if (remetente === 'dashboard') {
+            const camera = sessionStore.obterCameraPorCameraId(token, cameraId);
+            if (!camera) {
+                socket.emit('erro', 'Esta câmera não está conectada no momento.');
+                return;
+            }
+            io.to(camera.socketId).emit('mensagemChatRecebida', mensagem);
+            // Ecoa para outras abas do dashboard na mesma sessão (ex: mais de
+            // um monitor aberto), mas não de volta pro socket que enviou (já
+            // renderizou a própria mensagem otimisticamente) nem para a
+            // câmera (já recebeu acima, e o grupo da sessão inclui câmeras).
+            sessionStore.listarDashboards(token)
+                .filter((dashboardSocketId) => dashboardSocketId !== socket.id)
+                .forEach((dashboardSocketId) => {
+                    io.to(dashboardSocketId).emit('mensagemChatRecebida', mensagem);
+                });
+        } else {
+            sessionStore.listarDashboards(token).forEach((dashboardSocketId) => {
+                io.to(dashboardSocketId).emit('mensagemChatRecebida', mensagem);
+            });
+        }
     });
 
     socket.on('pararTransmissao', (token) => {

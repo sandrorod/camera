@@ -30,11 +30,26 @@
     const elBtnStop = document.getElementById('btn-stop');
     const elBtnSwitchCamera = document.getElementById('btn-switch-camera');
     const elSelectResolution = document.getElementById('select-resolution');
-    const elSelectFps = document.getElementById('select-fps');
     const elQualityLabel = document.getElementById('quality-label');
     const elFpsLabel = document.getElementById('fps-label');
     const elStatusMessage = document.getElementById('status-message');
     const elBannerVideoCongelado = document.getElementById('banner-video-congelado');
+    const elBannerNoAr = document.getElementById('banner-no-ar');
+    const elInputNomeTorcedor = document.getElementById('input-nome-torcedor');
+    const elInputTimeTorcedor = document.getElementById('input-time-torcedor');
+    const elBtnAbrirChat = document.getElementById('btn-abrir-chat');
+    const elChatBadgeCamera = document.getElementById('chat-badge-camera');
+    const elChatModal = document.getElementById('chat-modal');
+    const elChatMensagens = document.getElementById('chat-mensagens');
+    const elChatForm = document.getElementById('chat-form');
+    const elChatInput = document.getElementById('chat-input');
+    const elBtnFecharChatModal = document.getElementById('btn-fechar-chat-modal');
+    const templateChatMensagem = document.getElementById('template-chat-mensagem');
+
+    /** FPS fixo: a opção de escolher FPS foi removida da UI em favor dos
+     * campos de nome/time, e 30fps é a melhor opção padrão (fluidez sem
+     * exigir mais banda do que o necessário). */
+    const FPS_PADRAO = 30;
 
     /** @type {MediaStream|null} */
     let localStream = null;
@@ -136,7 +151,6 @@
      */
     async function iniciarCaptura() {
         const resolucaoSelecionada = resolucaoSelecionadaParaObjeto(elSelectResolution.value);
-        const fpsSelecionado = Number(elSelectFps.value);
 
         const indiceInicial = RESOLUCOES_PADRAO.findIndex(
             (r) => r.width === resolucaoSelecionada.width && r.height === resolucaoSelecionada.height
@@ -148,14 +162,14 @@
         elConnectionOverlay.classList.remove('hidden');
         elConnectionOverlay.querySelector('p').textContent = 'Solicitando permissão da câmera...';
 
-        const { stream, resolucao } = await obterMelhorStreamDisponivel(ordemTentativas, facingModeAtual, fpsSelecionado);
+        const { stream, resolucao } = await obterMelhorStreamDisponivel(ordemTentativas, facingModeAtual, FPS_PADRAO);
 
         localStream = stream;
         elLocalPreview.srcObject = stream;
         elConnectionOverlay.classList.add('hidden');
 
         const trackSettings = stream.getVideoTracks()[0]?.getSettings() ?? {};
-        const fpsReal = Math.round(trackSettings.frameRate || fpsSelecionado);
+        const fpsReal = Math.round(trackSettings.frameRate || FPS_PADRAO);
         atualizarIndicadorQualidade(
             { width: trackSettings.width || resolucao.width, height: trackSettings.height || resolucao.height },
             fpsReal
@@ -404,6 +418,14 @@
         return pc;
     }
 
+    /** Monta o payload de identificação enviado ao entrar na sessão como câmera. */
+    function obterDadosTorcedor() {
+        return {
+            nome: elInputNomeTorcedor.value.trim().slice(0, 60) || null,
+            time: elInputTimeTorcedor.value.trim().slice(0, 60) || null
+        };
+    }
+
     async function configurarSocket() {
         iceConfig = await buscarIceConfig(config.serverUrl);
 
@@ -412,7 +434,7 @@
                 definirStatus('Conexão perdida. Tentando reconectar automaticamente...');
             } else if (estado === 'conectado' && transmitindo) {
                 definirStatus('Reconectado. Retomando transmissão...');
-                conexaoAtual.emit('entrarComoCamera', { token: config.token, cameraId });
+                conexaoAtual.emit('entrarComoCamera', { token: config.token, cameraId, ...obterDadosTorcedor() });
             }
         });
 
@@ -474,6 +496,17 @@
             });
             definirStatus(silenciada ? 'Áudio silenciado pelo dashboard.' : 'Áudio reativado pelo dashboard.');
         });
+
+        // Avisa visualmente (banner piscante) quando esta câmera é a que está
+        // sendo exibida no link único de visualização do dashboard — sinal
+        // claro pra quem está segurando o celular de que a imagem está "no ar".
+        connection.on('cameraAtivaAtualizada', ({ cameraId: idAtivo }) => {
+            elBannerNoAr.classList.toggle('hidden', idAtivo !== cameraId);
+        });
+
+        connection.on('mensagemChatRecebida', (mensagem) => {
+            receberMensagemChat(mensagem);
+        });
     }
 
     async function iniciarTransmissao() {
@@ -488,7 +521,7 @@
                 await configurarSocket();
             }
 
-            connection.emit('entrarComoCamera', { token: config.token, cameraId });
+            connection.emit('entrarComoCamera', { token: config.token, cameraId, ...obterDadosTorcedor() });
 
             transmitindo = true;
             elRecIndicator.classList.remove('hidden');
@@ -524,6 +557,7 @@
         liberarWakeLock();
         ultimoFrameRecebidoEm = null;
         elBannerVideoCongelado.classList.add('hidden');
+        elBannerNoAr.classList.add('hidden');
 
         if (document.fullscreenElement) {
             document.exitFullscreen?.().catch(() => {});
@@ -566,13 +600,12 @@
         streamAntigo.getTracks().forEach((track) => track.stop());
 
         const resolucaoSelecionada = resolucaoSelecionadaParaObjeto(elSelectResolution.value);
-        const fpsSelecionado = Number(elSelectFps.value);
         const indiceInicial = RESOLUCOES_PADRAO.findIndex(
             (r) => r.width === resolucaoSelecionada.width && r.height === resolucaoSelecionada.height
         );
         const ordemTentativas = indiceInicial >= 0 ? RESOLUCOES_PADRAO.slice(indiceInicial) : RESOLUCOES_PADRAO;
 
-        const { stream } = await obterMelhorStreamDisponivel(ordemTentativas, facingModeAtual, fpsSelecionado);
+        const { stream } = await obterMelhorStreamDisponivel(ordemTentativas, facingModeAtual, FPS_PADRAO);
         localStream = stream;
         elLocalPreview.srcObject = stream;
         monitorarFpsReal(stream);
@@ -593,5 +626,81 @@
         if (transmitindo) {
             pararTransmissao(true);
         }
+    });
+
+    // ----- Chat com o dashboard -----
+    // Conversa isolada por câmera: do lado da câmera só existe a própria
+    // conversa (com "o" dashboard), então não precisa de seletor de conversa
+    // como no lado do dashboard, que fala com N câmeras diferentes.
+
+    let chatAberto = false;
+    let mensagensNaoLidas = 0;
+    const historicoChat = [];
+
+    function formatarHora(timestamp) {
+        return new Date(timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function renderizarMensagemChat(mensagem) {
+        const fragment = templateChatMensagem.content.cloneNode(true);
+        const elMensagem = fragment.querySelector('.chat-mensagem');
+        elMensagem.classList.toggle('chat-mensagem-dashboard', mensagem.remetente === 'dashboard');
+        elMensagem.querySelector('.chat-mensagem-texto').textContent = mensagem.texto;
+        elMensagem.querySelector('.chat-mensagem-hora').textContent = formatarHora(mensagem.enviadaEm);
+        elChatMensagens.appendChild(fragment);
+        elChatMensagens.scrollTop = elChatMensagens.scrollHeight;
+    }
+
+    function atualizarBadgeChat() {
+        elChatBadgeCamera.textContent = String(mensagensNaoLidas);
+        elChatBadgeCamera.classList.toggle('hidden', mensagensNaoLidas === 0);
+    }
+
+    function receberMensagemChat(mensagem) {
+        if (mensagem.cameraId !== cameraId) return;
+
+        historicoChat.push(mensagem);
+        if (chatAberto) {
+            renderizarMensagemChat(mensagem);
+        } else if (mensagem.remetente === 'dashboard') {
+            mensagensNaoLidas++;
+            atualizarBadgeChat();
+        }
+    }
+
+    function abrirChatModal() {
+        chatAberto = true;
+        elChatMensagens.innerHTML = '';
+        historicoChat.forEach(renderizarMensagemChat);
+
+        mensagensNaoLidas = 0;
+        atualizarBadgeChat();
+        elChatModal.classList.remove('hidden');
+        elChatInput.value = '';
+        elChatInput.focus();
+    }
+
+    function fecharChatModal() {
+        chatAberto = false;
+        elChatModal.classList.add('hidden');
+    }
+
+    elBtnAbrirChat.addEventListener('click', abrirChatModal);
+    elBtnFecharChatModal.addEventListener('click', fecharChatModal);
+    elChatModal.querySelector('.chat-modal-backdrop').addEventListener('click', fecharChatModal);
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !elChatModal.classList.contains('hidden')) fecharChatModal();
+    });
+
+    elChatForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const texto = elChatInput.value.trim();
+        if (!texto || !connection) return;
+
+        const mensagem = { cameraId, remetente: 'camera', texto, enviadaEm: Date.now() };
+        connection.emit('enviarMensagemChat', { token: config.token, cameraId, remetente: 'camera', texto });
+        historicoChat.push(mensagem);
+        renderizarMensagemChat(mensagem);
+        elChatInput.value = '';
     });
 })();

@@ -21,6 +21,10 @@
             ⚠️ A transmissão pode ter congelado enquanto o app estava em segundo plano. Volte a deixar esta tela em primeiro plano para retomar.
         </div>
 
+        <div id="banner-no-ar" class="banner-no-ar hidden">
+            🔴 SUA CÂMERA ESTÁ NO AR
+        </div>
+
         <main class="camera-stage">
             <video id="local-preview" autoplay playsinline muted></video>
 
@@ -51,19 +55,46 @@
                         <option value="640x480">SD (640x480)</option>
                     </select>
                 </label>
+            </div>
+
+            <div class="controls-row controls-row-select">
+                <label class="select-field">
+                    <span>Seu nome</span>
+                    <input type="text" id="input-nome-torcedor" placeholder="Ex: João" maxlength="60" />
+                </label>
 
                 <label class="select-field">
-                    <span>FPS</span>
-                    <select id="select-fps">
-                        <option value="30" selected>30 fps</option>
-                        <option value="24">24 fps</option>
-                        <option value="15">15 fps</option>
-                    </select>
+                    <span>Torcendo pra</span>
+                    <input type="text" id="input-time-torcedor" placeholder="Ex: Flamengo" maxlength="60" />
                 </label>
             </div>
 
             <p id="status-message" class="status-message"></p>
         </section>
+
+        <button id="btn-abrir-chat" class="btn-abrir-chat" title="Conversar com o dashboard" aria-label="Chat">💬<span id="chat-badge-camera" class="chat-badge hidden">0</span></button>
+
+        <div id="chat-modal" class="chat-modal hidden">
+            <div class="chat-modal-backdrop"></div>
+            <div class="chat-modal-box">
+                <div class="chat-modal-header">
+                    <span>Chat com o dashboard</span>
+                    <button id="btn-fechar-chat-modal" class="btn-fechar-modal" title="Fechar" aria-label="Fechar">&times;</button>
+                </div>
+                <div id="chat-mensagens" class="chat-mensagens"></div>
+                <form id="chat-form" class="chat-form">
+                    <input id="chat-input" type="text" placeholder="Digite uma mensagem..." maxlength="500" autocomplete="off" />
+                    <button type="submit" class="btn btn-primary btn-small">Enviar</button>
+                </form>
+            </div>
+        </div>
+
+        <template id="template-chat-mensagem">
+            <div class="chat-mensagem">
+                <span class="chat-mensagem-texto"></span>
+                <span class="chat-mensagem-hora"></span>
+            </div>
+        </template>
     </div>
 
     <script src="/config.js"></script>

@@ -20,8 +20,18 @@
     const elQrcodeCanvas = document.getElementById('qrcode-canvas');
     const elBtnFecharQrcodeModal = document.getElementById('btn-fechar-qrcode-modal');
     const templateCameraCard = document.getElementById('template-camera-card');
+    const elChatModal = document.getElementById('chat-modal');
+    const elChatModalTitulo = document.getElementById('chat-modal-titulo');
+    const elChatMensagens = document.getElementById('chat-mensagens');
+    const elChatForm = document.getElementById('chat-form');
+    const elChatInput = document.getElementById('chat-input');
+    const elBtnFecharChatModal = document.getElementById('btn-fechar-chat-modal');
+    const templateChatMensagem = document.getElementById('template-chat-mensagem');
 
     let qrcode = null;
+
+    /** cameraId da conversa aberta no momento no modal de chat, ou null se fechado. */
+    let chatAbertoCameraId = null;
 
     /** Estado da única sessão ativa no dashboard. */
     let sessaoAtual = null;
@@ -53,6 +63,8 @@
      * @property {Map<string, string>} cameraIds - socketId -> cameraId persistente
      * @property {Map<string, HTMLElement>} camerasPorId - cameraId -> elemento .camera-card
      * @property {string|null} cameraAtivaId - cameraId exibido no link de visualização único
+     * @property {Map<string, Array>} mensagensPorCamera - cameraId -> histórico de mensagens do chat, isolado por câmera
+     * @property {Map<string, number>} naoLidasPorCamera - cameraId -> contagem de mensagens não lidas
      */
 
     async function carregarTokensSalvos() {
@@ -164,7 +176,7 @@
         elCamerasGrid.innerHTML = '';
     }
 
-    function criarCardCamera(sessaoUI, cameraSocketId, cameraId) {
+    function criarCardCamera(sessaoUI, cameraSocketId, cameraId, dadosTorcedor) {
         if (sessaoUI.videoElements.has(cameraSocketId)) {
             return sessaoUI.videoElements.get(cameraSocketId);
         }
@@ -172,10 +184,18 @@
         const fragment = templateCameraCard.content.cloneNode(true);
         const elCard = fragment.querySelector('.camera-card');
         const video = fragment.querySelector('video');
+        const elTorcedor = fragment.querySelector('.camera-card-torcedor');
+
+        if (dadosTorcedor?.nome || dadosTorcedor?.time) {
+            const partes = [dadosTorcedor.nome, dadosTorcedor.time && `torcendo pro ${dadosTorcedor.time}`].filter(Boolean);
+            elTorcedor.textContent = partes.join(' — ');
+            elTorcedor.classList.remove('hidden');
+        }
         const elBtnSelecionar = fragment.querySelector('.btn-selecionar-camera');
         const elBtnCopiarCameraIndividual = fragment.querySelector('.btn-copiar-camera-individual');
         const elBtnCopiarCameraLink = fragment.querySelector('.btn-copiar-camera-link');
         const elBtnSilenciar = fragment.querySelector('.btn-silenciar-camera');
+        const elBtnChat = fragment.querySelector('.btn-chat-camera');
         const elBtnDesconectar = fragment.querySelector('.btn-desconectar-camera');
 
         if (cameraId) {
@@ -191,6 +211,7 @@
             elBtnSilenciar.addEventListener('click', () => {
                 sessaoUI.connection?.emit('alternarSilenciarCamera', { token: sessaoUI.token, cameraId });
             });
+            elBtnChat.addEventListener('click', () => abrirChatModal(sessaoUI, cameraId));
             elBtnDesconectar.addEventListener('click', () => {
                 if (!confirm('Desconectar esta câmera? A transmissão dela será encerrada.')) return;
                 sessaoUI.connection?.emit('desconectarCamera', { token: sessaoUI.token, cameraId });
@@ -200,6 +221,7 @@
             elBtnCopiarCameraIndividual.disabled = true;
             elBtnCopiarCameraLink.disabled = true;
             elBtnSilenciar.disabled = true;
+            elBtnChat.disabled = true;
             elBtnDesconectar.disabled = true;
         }
 
@@ -232,6 +254,80 @@
         elBtn.title = silenciada ? 'Reativar áudio para quem está assistindo' : 'Silenciar áudio para quem está assistindo';
         elBtn.classList.toggle('silenciada', silenciada);
     }
+
+    function formatarHora(timestamp) {
+        return new Date(timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function renderizarMensagemChat(mensagem) {
+        const fragment = templateChatMensagem.content.cloneNode(true);
+        const elMensagem = fragment.querySelector('.chat-mensagem');
+        elMensagem.classList.toggle('chat-mensagem-dashboard', mensagem.remetente === 'dashboard');
+        elMensagem.querySelector('.chat-mensagem-texto').textContent = mensagem.texto;
+        elMensagem.querySelector('.chat-mensagem-hora').textContent = formatarHora(mensagem.enviadaEm);
+        elChatMensagens.appendChild(fragment);
+        elChatMensagens.scrollTop = elChatMensagens.scrollHeight;
+    }
+
+    function atualizarBadgeChat(sessaoUI, cameraId) {
+        const elCard = sessaoUI.camerasPorId.get(cameraId);
+        if (!elCard) return;
+        const quantidade = sessaoUI.naoLidasPorCamera.get(cameraId) || 0;
+        const elBadge = elCard.querySelector('.chat-badge');
+        elBadge.textContent = String(quantidade);
+        elBadge.classList.toggle('hidden', quantidade === 0);
+    }
+
+    function receberMensagemChat(sessaoUI, mensagem) {
+        if (!sessaoUI.mensagensPorCamera.has(mensagem.cameraId)) {
+            sessaoUI.mensagensPorCamera.set(mensagem.cameraId, []);
+        }
+        sessaoUI.mensagensPorCamera.get(mensagem.cameraId).push(mensagem);
+
+        if (chatAbertoCameraId === mensagem.cameraId) {
+            renderizarMensagemChat(mensagem);
+        } else if (mensagem.remetente !== 'dashboard') {
+            const atual = sessaoUI.naoLidasPorCamera.get(mensagem.cameraId) || 0;
+            sessaoUI.naoLidasPorCamera.set(mensagem.cameraId, atual + 1);
+            atualizarBadgeChat(sessaoUI, mensagem.cameraId);
+        }
+    }
+
+    function abrirChatModal(sessaoUI, cameraId) {
+        chatAbertoCameraId = cameraId;
+        elChatModalTitulo.textContent = `Chat com a câmera`;
+        elChatMensagens.innerHTML = '';
+        (sessaoUI.mensagensPorCamera.get(cameraId) || []).forEach(renderizarMensagemChat);
+
+        sessaoUI.naoLidasPorCamera.set(cameraId, 0);
+        atualizarBadgeChat(sessaoUI, cameraId);
+
+        elChatModal.classList.remove('hidden');
+        elChatInput.value = '';
+        elChatInput.focus();
+
+        elChatForm.onsubmit = (event) => {
+            event.preventDefault();
+            const texto = elChatInput.value.trim();
+            if (!texto) return;
+
+            const mensagem = { cameraId, remetente: 'dashboard', texto, enviadaEm: Date.now() };
+            sessaoUI.connection?.emit('enviarMensagemChat', { token: sessaoUI.token, cameraId, remetente: 'dashboard', texto });
+            receberMensagemChat(sessaoUI, mensagem);
+            elChatInput.value = '';
+        };
+    }
+
+    function fecharChatModal() {
+        chatAbertoCameraId = null;
+        elChatModal.classList.add('hidden');
+    }
+
+    elBtnFecharChatModal.addEventListener('click', fecharChatModal);
+    elChatModal.querySelector('.chat-modal-backdrop').addEventListener('click', fecharChatModal);
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !elChatModal.classList.contains('hidden')) fecharChatModal();
+    });
 
     function removerCardCamera(sessaoUI, cameraSocketId) {
         const video = sessaoUI.videoElements.get(cameraSocketId);
@@ -312,7 +408,9 @@
             videoElements: new Map(),
             cameraIds: new Map(),
             camerasPorId: new Map(),
-            cameraAtivaId: null
+            cameraAtivaId: null,
+            mensagensPorCamera: new Map(),
+            naoLidasPorCamera: new Map()
         };
         sessaoAtual = sessaoUI;
 
@@ -330,9 +428,9 @@
         });
         sessaoUI.connection = connection;
 
-        connection.on('novaCameraConectada', ({ socketId, cameraId }) => {
+        connection.on('novaCameraConectada', ({ socketId, cameraId, nome, time }) => {
             sessaoUI.cameraIds.set(socketId, cameraId);
-            criarCardCamera(sessaoUI, socketId, cameraId);
+            criarCardCamera(sessaoUI, socketId, cameraId, { nome, time });
         });
 
         connection.on('cameraDesconectada', ({ socketId }) => {
@@ -355,6 +453,10 @@
 
         connection.on('cameraSilenciadaAtualizada', ({ cameraId, silenciada }) => {
             atualizarMarcacaoSilenciada(sessaoUI, cameraId, silenciada);
+        });
+
+        connection.on('mensagemChatRecebida', (mensagem) => {
+            receberMensagemChat(sessaoUI, mensagem);
         });
 
         connection.on('receberOffer', async ({ senderSocketId, sdpOffer }) => {
