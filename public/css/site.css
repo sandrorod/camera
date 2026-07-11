@@ -133,6 +133,10 @@ html, body {
     object-fit: contain;
 }
 
+.remote-video-invertido {
+    transform: rotate(180deg);
+}
+
 /* ----- Viewer stage: ocupa a tela inteira, sem nenhum outro elemento de UI ----- */
 
 .viewer-stage-fullscreen {
@@ -521,6 +525,10 @@ html, body {
 
 .camera-card-vertical video {
     object-fit: contain;
+}
+
+.camera-card-video-invertido {
+    transform: rotate(180deg);
 }
 
 .camera-card-label {

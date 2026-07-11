@@ -170,14 +170,30 @@
      * física do celular — o sensor da câmera captura sempre na mesma
      * orientação nativa (geralmente paisagem), e é a rotação do dispositivo
      * que gira a imagem na exibição via metadata, não a resolução em si. Por
-     * isso a orientação real precisa vir de screen.orientation (ou da media
-     * query de fallback), que reflete a posição física do aparelho.
+     * isso a orientação real precisa vir de screen.orientation.
+     *
+     * Um booleano vertical/horizontal não é suficiente: existem 4 estados
+     * físicos (portrait-primary, portrait-secondary, landscape-primary,
+     * landscape-secondary), e os dois "secondary" são o mesmo eixo girado
+     * 180° — é isso que causava a imagem de cabeça para baixo quando o
+     * celular era virado nesse sentido, já que antes só se distinguia
+     * vertical/horizontal, nunca o lado invertido.
      */
-    function celularEstaVertical() {
+    function obterOrientacaoTela() {
         if (screen.orientation?.type) {
-            return screen.orientation.type.startsWith('portrait');
+            return screen.orientation.type; // 'portrait-primary' | 'portrait-secondary' | 'landscape-primary' | 'landscape-secondary'
         }
-        return window.matchMedia('(orientation: portrait)').matches;
+        // Fallback sem acesso a screen.orientation: só dá pra saber o eixo
+        // (retrato/paisagem), nunca se está invertido — assume o lado normal.
+        return window.matchMedia('(orientation: portrait)').matches ? 'portrait-primary' : 'landscape-primary';
+    }
+
+    function celularEstaVertical(orientacao = obterOrientacaoTela()) {
+        return orientacao.startsWith('portrait');
+    }
+
+    function celularEstaInvertido(orientacao = obterOrientacaoTela()) {
+        return orientacao.endsWith('secondary');
     }
 
     /**
@@ -199,14 +215,16 @@
 
     let orientacaoAtual = null;
     function notificarOrientacaoSeMudou() {
-        const vertical = celularEstaVertical();
+        const tipoOrientacao = obterOrientacaoTela();
+        const vertical = celularEstaVertical(tipoOrientacao);
+        const invertido = celularEstaInvertido(tipoOrientacao);
         ajustarTelaCheiaPelaOrientacao(vertical);
 
-        if (orientacaoAtual === vertical) return;
-        orientacaoAtual = vertical;
+        if (orientacaoAtual === tipoOrientacao) return;
+        orientacaoAtual = tipoOrientacao;
 
         if (connection && connection.connected) {
-            connection.emit('orientacaoAtualizada', { token: config.token, vertical });
+            connection.emit('orientacaoAtualizada', { token: config.token, vertical, invertido });
         }
     }
 

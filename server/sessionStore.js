@@ -18,7 +18,7 @@ const sessoes = new Map();
 /**
  * @typedef {Object} Sessao
  * @property {string} token
- * @property {Map<string, { cameraId: string, socketId: string, conectadaEm: number, vertical: boolean|null, silenciada: boolean }>} cameras - chave: cameraId
+ * @property {Map<string, { cameraId: string, socketId: string, conectadaEm: number, vertical: boolean|null, invertido: boolean, silenciada: boolean }>} cameras - chave: cameraId
  * @property {Set<string>} dashboards
  * @property {Map<string, Set<string>>} observadoresPorCamera - cameraId -> socketIds assistindo via watch.html
  * @property {number} criadaEm
@@ -86,6 +86,7 @@ function adicionarCamera(token, cameraId, socketId) {
         socketId,
         conectadaEm: Date.now(),
         vertical: existente?.vertical ?? null,
+        invertido: existente?.invertido ?? false,
         silenciada: existente?.silenciada ?? false
     });
     sessao.ultimaAtividade = Date.now();
@@ -117,11 +118,12 @@ function obterCameraAtiva(token) {
     return sessao.cameras.get(sessao.cameraAtivaId) || null;
 }
 
-function atualizarOrientacaoCamera(token, cameraId, vertical) {
+function atualizarOrientacaoCamera(token, cameraId, vertical, invertido) {
     const sessao = obterSessao(token);
     const cam = sessao?.cameras.get(cameraId);
     if (!cam) return;
     cam.vertical = vertical;
+    cam.invertido = invertido;
 }
 
 /**
