@@ -10,7 +10,6 @@
 const crypto = require('crypto');
 
 const TOKEN_BYTE_LENGTH = 24;
-const LIMITE_INATIVIDADE_MS = 5 * 60 * 1000; // 5 minutos, igual ao SessionCleanupService original
 
 /** @type {Map<string, Sessao>} */
 const sessoes = new Map();
@@ -253,18 +252,24 @@ function encerrarSessao(token) {
 }
 
 /**
- * Remove sessões inativas (sem heartbeat) ou expiradas. Chamado periodicamente.
+ * Remove sessões expiradas (expiraEm explícito, não usado atualmente — as
+ * sessões duram até serem deletadas manualmente via "Gerar novo link" ou
+ * DELETE /api/sessions/:token). Chamado periodicamente.
+ *
+ * Antes, também encerrava sessões sem atividade há mais de 5min
+ * (LIMITE_INATIVIDADE_MS) — isso encerrava a sessão de um dashboard aberto
+ * exibindo o QR code enquanto nenhuma câmera tinha conectado ainda, fazendo
+ * a câmera criar uma sessão nova ao escanear o QR já expirado e nunca
+ * aparecer no dashboard, que continuava preso à sessão antiga.
  * @returns {number} quantidade de sessões encerradas
  */
 function encerrarSessoesInativas() {
-    const agora = Date.now();
     let encerradas = 0;
 
     for (const sessao of sessoes.values()) {
         if (!sessao.ativa) continue;
 
-        const inativa = agora - sessao.ultimaAtividade > LIMITE_INATIVIDADE_MS;
-        if (inativa || sessaoExpirada(sessao)) {
+        if (sessaoExpirada(sessao)) {
             sessao.ativa = false;
             sessao.cameras.clear();
             sessao.dashboards.clear();

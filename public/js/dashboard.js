@@ -466,6 +466,18 @@
         });
         sessaoUI.connection = connection;
 
+        // Sem heartbeat, a sessão só ficava "viva" no servidor por atividade de
+        // câmera (ver adicionarCamera em sessionStore.js) — um dashboard aberto
+        // só exibindo o QR code, sem nenhuma câmera conectada ainda, não gerava
+        // nenhuma atividade e a sessão expirava em 5min de inatividade mesmo com
+        // o link/QR ainda visível na tela. Quando a câmera enfim conectava depois
+        // disso, ela recriava a sessão (token novo do zero), mas o dashboard
+        // continuava preso à sessão antiga já encerrada — por isso a câmera
+        // aparecia conectada nela mesma, mas nunca surgia na lista do dashboard.
+        sessaoUI.heartbeatIntervalId = setInterval(() => {
+            if (connection.connected) connection.emit('heartbeat', token);
+        }, 30000);
+
         connection.on('novaCameraConectada', ({ socketId, cameraId, nome, time }) => {
             sessaoUI.cameraIds.set(socketId, cameraId);
             criarCardCamera(sessaoUI, socketId, cameraId, { nome, time });
@@ -529,6 +541,7 @@
         if (!sessaoAtual) return;
         const tokenAntigo = sessaoAtual.token;
 
+        if (sessaoAtual.heartbeatIntervalId) clearInterval(sessaoAtual.heartbeatIntervalId);
         sessaoAtual.peerConnections.forEach((pc) => pc.close());
         sessaoAtual.connection?.disconnect();
         sessaoAtual = null;

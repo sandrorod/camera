@@ -237,6 +237,11 @@ io.on('connection', (socket) => {
 
         socket.join(grupoSessao(token));
         sessionStore.adicionarDashboard(token, socket.id);
+        // Um dashboard aberto (só exibindo o QR/link, sem câmera ainda) não
+        // gerava nenhuma atividade antes — a sessão podia expirar por
+        // inatividade (5min) mesmo com o dashboard visível, fazendo a câmera
+        // conectar numa sessão recriada do zero que o dashboard não via mais.
+        sessionStore.atualizarAtividade(token);
 
         const camerasAtivas = sessionStore.listarCameras(token);
         console.log(`[Dashboard conectado] token=${token} socketId=${socket.id} cameras=${camerasAtivas.length}`);
