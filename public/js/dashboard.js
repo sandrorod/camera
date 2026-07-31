@@ -126,17 +126,19 @@
         }, 1500);
     }
 
-    /** Mesmo feedback de cópia, mas para botões só-ícone: troca o emoji sem adicionar texto. */
+    const SVG_CHECK = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+
+    /** Mesmo feedback de cópia, mas para botões só-ícone (SVG): troca pelo ícone de check temporariamente. */
     function mostrarFeedbackCopiadoIcone(elBotao) {
         if (elBotao.dataset.feedbackAtivo) return;
         elBotao.dataset.feedbackAtivo = '1';
 
-        const textoOriginal = elBotao.textContent;
-        elBotao.textContent = '✅';
+        const htmlOriginal = elBotao.innerHTML;
+        elBotao.innerHTML = SVG_CHECK;
         elBotao.classList.add('btn-copiado');
 
         setTimeout(() => {
-            elBotao.textContent = textoOriginal;
+            elBotao.innerHTML = htmlOriginal;
             elBotao.classList.remove('btn-copiado');
             delete elBotao.dataset.feedbackAtivo;
         }, 1500);
@@ -267,11 +269,14 @@
         });
     }
 
+    const SVG_VOLUME_ON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
+    const SVG_VOLUME_OFF = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>';
+
     function atualizarMarcacaoSilenciada(sessaoUI, cameraId, silenciada) {
         const elWrapper = sessaoUI.camerasPorId.get(cameraId);
         if (!elWrapper) return;
         const elBtn = elWrapper.querySelector('.btn-silenciar-camera');
-        elBtn.textContent = silenciada ? '🔇' : '🔊';
+        elBtn.innerHTML = silenciada ? SVG_VOLUME_OFF : SVG_VOLUME_ON;
         elBtn.title = silenciada ? 'Reativar áudio para quem está assistindo' : 'Silenciar áudio para quem está assistindo';
         elBtn.classList.toggle('silenciada', silenciada);
     }
@@ -357,7 +362,11 @@
         if (!video) return;
 
         video.srcObject = null;
-        video.closest('.camera-card')?.remove();
+        // Remove o .camera-card-wrapper inteiro, não só o .camera-card interno
+        // — .camera-card-actions (a barra de ícones) é irmã de .camera-card
+        // dentro do wrapper, então remover só o .camera-card deixava os
+        // ícones da câmera desconectada visíveis, "flutuando" sem o card.
+        video.closest('.camera-card-wrapper')?.remove();
         sessaoUI.videoElements.delete(cameraSocketId);
 
         const cameraId = sessaoUI.cameraIds.get(cameraSocketId);
