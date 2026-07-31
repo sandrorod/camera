@@ -206,15 +206,16 @@
         const elBtnChat = fragment.querySelector('.btn-chat-camera');
         const elBtnDesconectar = fragment.querySelector('.btn-desconectar-camera');
 
-        // Rotação é só visual (client-side), não altera o stream nem afeta
-        // quem assiste pelo link de visualização — cada clique soma 90°
-        // sentido horário, voltando a 0 após 270. Combina com o ângulo de
-        // inversão automática (ver aplicarTransformCamera) em vez de
-        // sobrescrevê-lo.
+        // Cada clique soma 90° sentido horário (volta a 0 após 270). Emitido
+        // ao servidor (que persiste e retransmite) em vez de só aplicar
+        // local — sem isso, quem assiste pelo link de visualização (ou outro
+        // dashboard aberto) nunca via a rotação, só o próprio dashboard que
+        // clicou. O efeito visual imediato vem de volta pelo listener
+        // rotacaoCameraAtualizada (mesmo caminho de quem está assistindo),
+        // então não aplicamos o transform aqui diretamente.
         elBtnGirar.addEventListener('click', () => {
-            const anguloAtual = Number(video.dataset.anguloManual || '0');
-            video.dataset.anguloManual = String((anguloAtual + 90) % 360);
-            aplicarTransformCamera(video);
+            if (!cameraId) return;
+            sessaoUI.connection?.emit('girarCamera', { token: sessaoUI.token, cameraId });
         });
 
         if (cameraId) {
@@ -403,6 +404,14 @@
         aplicarTransformCamera(video);
     }
 
+    function atualizarRotacaoManualCamera(sessaoUI, cameraId, rotacaoManual) {
+        const elWrapper = sessaoUI.camerasPorId.get(cameraId);
+        if (!elWrapper) return;
+        const video = elWrapper.querySelector('video');
+        video.dataset.anguloManual = String(rotacaoManual);
+        aplicarTransformCamera(video);
+    }
+
     function criarPeerConnectionParaCamera(sessaoUI, iceConfig, cameraSocketId) {
         const pc = new RTCPeerConnection({ iceServers: montarIceServers(iceConfig) });
         sessaoUI.peerConnections.set(cameraSocketId, pc);
@@ -503,6 +512,10 @@
 
         connection.on('orientacaoCameraAtualizada', ({ cameraId, vertical, invertido }) => {
             atualizarOrientacaoCamera(sessaoUI, cameraId, vertical, invertido);
+        });
+
+        connection.on('rotacaoCameraAtualizada', ({ cameraId, rotacaoManual }) => {
+            atualizarRotacaoManualCamera(sessaoUI, cameraId, rotacaoManual);
         });
 
         connection.on('cameraAtivaAtualizada', ({ cameraId }) => {

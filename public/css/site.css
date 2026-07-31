@@ -153,8 +153,8 @@ html, body {
     object-fit: contain;
 }
 
-.remote-video-invertido {
-    transform: rotate(180deg);
+#remote-video {
+    transition: transform 0.2s ease;
 }
 
 /* ----- Viewer stage: ocupa a tela inteira, sem nenhum outro elemento de UI ----- */

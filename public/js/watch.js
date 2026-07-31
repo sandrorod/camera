@@ -20,6 +20,15 @@
     let cameraIdAtual = config.cameraId || null;
     let iceConfig = { stunServers: [], turnServers: [] };
 
+    /** Soma o ângulo automático (câmera invertida em paisagem) com a rotação
+     *  manual (botão girar do dashboard) num só transform no vídeo. */
+    function aplicarTransformVideo() {
+        const anguloAuto = Number(elRemoteVideo.dataset.anguloAuto || '0');
+        const anguloManual = Number(elRemoteVideo.dataset.anguloManual || '0');
+        const total = (anguloAuto + anguloManual) % 360;
+        elRemoteVideo.style.transform = total ? `rotate(${total}deg)` : '';
+    }
+
     function definirOverlay(mensagem) {
         if (mensagem) {
             elConnectionOverlay.querySelector('p').textContent = mensagem;
@@ -118,7 +127,17 @@
             elRemoteVideo.classList.toggle('remote-video-vertical', vertical);
             // invertido só vem true para celular/tablet em paisagem — ver
             // ehDispositivoMovel em camera.js (webcam de PC não precisa disso).
-            elRemoteVideo.classList.toggle('remote-video-invertido', !!invertido);
+            elRemoteVideo.dataset.anguloAuto = invertido ? '180' : '0';
+            aplicarTransformVideo();
+        });
+
+        // Rotação manual (botão "girar" no dashboard) — combinada com o ângulo
+        // automático acima, já que ambos escrevem na mesma propriedade
+        // transform e não podem se sobrescrever.
+        connection.on('rotacaoCameraAtualizada', ({ cameraId, rotacaoManual }) => {
+            if (cameraId !== cameraIdAtual) return;
+            elRemoteVideo.dataset.anguloManual = String(rotacaoManual);
+            aplicarTransformVideo();
         });
 
         connection.on('cameraDesconectada', ({ cameraId }) => {

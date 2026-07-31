@@ -17,7 +17,7 @@ const sessoes = new Map();
 /**
  * @typedef {Object} Sessao
  * @property {string} token
- * @property {Map<string, { cameraId: string, socketId: string, conectadaEm: number, vertical: boolean|null, invertido: boolean, silenciada: boolean, nome: string|null, time: string|null }>} cameras - chave: cameraId
+ * @property {Map<string, { cameraId: string, socketId: string, conectadaEm: number, vertical: boolean|null, invertido: boolean, rotacaoManual: number, silenciada: boolean, nome: string|null, time: string|null }>} cameras - chave: cameraId
  * @property {Set<string>} dashboards
  * @property {Map<string, Set<string>>} observadoresPorCamera - cameraId -> socketIds assistindo via watch.html
  * @property {number} criadaEm
@@ -86,6 +86,7 @@ function adicionarCamera(token, cameraId, socketId, nome, time) {
         conectadaEm: Date.now(),
         vertical: existente?.vertical ?? null,
         invertido: existente?.invertido ?? false,
+        rotacaoManual: existente?.rotacaoManual ?? 0,
         silenciada: existente?.silenciada ?? false,
         nome: nome ?? existente?.nome ?? null,
         time: time ?? existente?.time ?? null
@@ -128,6 +129,21 @@ function atualizarOrientacaoCamera(token, cameraId, vertical, invertido) {
     if (!cam) return;
     cam.vertical = vertical;
     cam.invertido = invertido;
+}
+
+/**
+ * Define a rotação manual (botão "girar" do dashboard) de uma câmera, em
+ * graus (0/90/180/270). É independente da orientação automática
+ * (vertical/invertido, decidida pela própria câmera) — ambas se combinam
+ * visualmente em quem assiste, mas essa aqui só muda por ação do dashboard.
+ * Retorna o novo ângulo, ou null se a câmera não existir.
+ */
+function atualizarRotacaoManual(token, cameraId, graus) {
+    const sessao = obterSessao(token);
+    const cam = sessao?.cameras.get(cameraId);
+    if (!cam) return null;
+    cam.rotacaoManual = ((graus % 360) + 360) % 360;
+    return cam.rotacaoManual;
 }
 
 /**
@@ -289,6 +305,7 @@ module.exports = {
     definirCameraAtiva,
     obterCameraAtiva,
     atualizarOrientacaoCamera,
+    atualizarRotacaoManual,
     alternarSilenciada,
     removerCameraPorSocketId,
     listarCameras,

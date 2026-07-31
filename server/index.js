@@ -176,6 +176,9 @@ io.on('connection', (socket) => {
         if (camera.vertical !== null) {
             socket.emit('orientacaoCameraAtualizada', { cameraId: cameraIdAlvo, vertical: camera.vertical, invertido: camera.invertido });
         }
+        if (camera.rotacaoManual) {
+            socket.emit('rotacaoCameraAtualizada', { cameraId: cameraIdAlvo, rotacaoManual: camera.rotacaoManual });
+        }
 
         notificarContagemObservadores(token, cameraIdAlvo);
     });
@@ -260,6 +263,10 @@ io.on('connection', (socket) => {
                 socket.emit('orientacaoCameraAtualizada', { cameraId: cam.cameraId, vertical: cam.vertical, invertido: cam.invertido });
             }
 
+            if (cam.rotacaoManual) {
+                socket.emit('rotacaoCameraAtualizada', { cameraId: cam.cameraId, rotacaoManual: cam.rotacaoManual });
+            }
+
             if (cam.silenciada) {
                 socket.emit('cameraSilenciadaAtualizada', { cameraId: cam.cameraId, silenciada: true });
             }
@@ -290,6 +297,16 @@ io.on('connection', (socket) => {
     socket.on('orientacaoAtualizada', ({ token, vertical, invertido }) => {
         sessionStore.atualizarOrientacaoCamera(token, socket.cameraId, vertical, invertido);
         io.to(grupoSessao(token)).emit('orientacaoCameraAtualizada', { cameraId: socket.cameraId, vertical, invertido });
+    });
+
+    // Disparado pelo botão "girar" no dashboard — propaga a rotação manual
+    // (independente da orientação automática) para quem está assistindo
+    // (watch.html) e para outros dashboards abertos na mesma sessão.
+    socket.on('girarCamera', ({ token, cameraId }) => {
+        const cam = sessionStore.obterCameraPorCameraId(token, cameraId);
+        if (!cam) return;
+        const novoAngulo = sessionStore.atualizarRotacaoManual(token, cameraId, cam.rotacaoManual + 90);
+        io.to(grupoSessao(token)).emit('rotacaoCameraAtualizada', { cameraId, rotacaoManual: novoAngulo });
     });
 
     // Disparado pelo dashboard ao clicar em "Silenciar" num card: pede à
