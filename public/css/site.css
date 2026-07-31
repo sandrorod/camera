@@ -636,10 +636,7 @@ html, body {
     width: 100%;
     height: 100%;
     object-fit: cover;
-}
-
-.camera-card-video-invertido {
-    transform: rotate(180deg);
+    transition: transform 0.2s ease;
 }
 
 .camera-card-label {
@@ -701,6 +698,7 @@ html, body {
 .btn-copiar-camera-individual,
 .btn-copiar-camera-link,
 .btn-silenciar-camera,
+.btn-girar-camera,
 .btn-chat-camera,
 .btn-desconectar-camera {
     width: 34px;
@@ -722,6 +720,7 @@ html, body {
 .btn-copiar-camera-individual:hover,
 .btn-copiar-camera-link:hover,
 .btn-silenciar-camera:hover,
+.btn-girar-camera:hover,
 .btn-chat-camera:hover,
 .btn-desconectar-camera:hover {
     background: var(--bg-secondary);
@@ -804,9 +803,13 @@ html, body {
 
 .qrcode-modal-box #qrcode-canvas {
     line-height: 0;
-    border-radius: 8px;
-    overflow: hidden;
     max-width: 100%;
+    /* Moldura branca (quiet zone) ao redor do código — sem ela, leitores de
+       QR em celulares com câmera ruim/baixa luz perdem a leitura porque o
+       fundo do app (escuro) chega colado nos módulos do código. */
+    padding: 16px;
+    background: #ffffff;
+    border-radius: 12px;
 }
 
 .qrcode-modal-box #qrcode-canvas img,

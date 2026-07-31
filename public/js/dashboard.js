@@ -148,12 +148,16 @@
 
     function abrirQrcodeModal(link) {
         elQrcodeCanvas.innerHTML = '';
+        // Preto/branco puro (contraste máximo) em vez de tons acinzentados —
+        // câmeras de celular sob luz ruim/tela com brilho baixo perdiam a
+        // leitura com baixo contraste. correctLevel H (30% de correção de
+        // erro) já era o máximo disponível e se mantém.
         qrcode = new QRCode(elQrcodeCanvas, {
             text: link,
-            width: 320,
-            height: 320,
-            colorDark: '#0b0f14',
-            colorLight: '#eef2f6',
+            width: 360,
+            height: 360,
+            colorDark: '#000000',
+            colorLight: '#ffffff',
             correctLevel: QRCode.CorrectLevel.H
         });
         elQrcodeModal.classList.remove('hidden');
@@ -196,8 +200,20 @@
         const elBtnCopiarCameraIndividual = fragment.querySelector('.btn-copiar-camera-individual');
         const elBtnCopiarCameraLink = fragment.querySelector('.btn-copiar-camera-link');
         const elBtnSilenciar = fragment.querySelector('.btn-silenciar-camera');
+        const elBtnGirar = fragment.querySelector('.btn-girar-camera');
         const elBtnChat = fragment.querySelector('.btn-chat-camera');
         const elBtnDesconectar = fragment.querySelector('.btn-desconectar-camera');
+
+        // Rotação é só visual (client-side), não altera o stream nem afeta
+        // quem assiste pelo link de visualização — cada clique soma 90°
+        // sentido horário, voltando a 0 após 270. Combina com o ângulo de
+        // inversão automática (ver aplicarTransformCamera) em vez de
+        // sobrescrevê-lo.
+        elBtnGirar.addEventListener('click', () => {
+            const anguloAtual = Number(video.dataset.anguloManual || '0');
+            video.dataset.anguloManual = String((anguloAtual + 90) % 360);
+            aplicarTransformCamera(video);
+        });
 
         if (cameraId) {
             elBtnSelecionar.addEventListener('click', () => {
@@ -356,6 +372,16 @@
         elCard.querySelector('.camera-card-viewers-count').textContent = String(quantidade);
     }
 
+    /** Aplica no <video> a soma dos 180° automáticos (câmera invertida) com
+     *  a rotação manual (botão girar) — ambos escrevem em `transform`, então
+     *  precisam ser combinados num só valor em vez de se sobrescreverem. */
+    function aplicarTransformCamera(video) {
+        const anguloAuto = Number(video.dataset.anguloAuto || '0');
+        const anguloManual = Number(video.dataset.anguloManual || '0');
+        const total = (anguloAuto + anguloManual) % 360;
+        video.style.transform = total ? `rotate(${total}deg)` : '';
+    }
+
     function atualizarOrientacaoCamera(sessaoUI, cameraId, vertical, invertido) {
         const elWrapper = sessaoUI.camerasPorId.get(cameraId);
         if (!elWrapper) return;
@@ -363,7 +389,9 @@
         // invertido só vem true para celular/tablet em paisagem — a própria
         // câmera decide isso (ver ehDispositivoMovel em camera.js), já que
         // webcam de PC não sofre desse problema mesmo sendo sempre paisagem.
-        elWrapper.querySelector('video').classList.toggle('camera-card-video-invertido', !!invertido);
+        const video = elWrapper.querySelector('video');
+        video.dataset.anguloAuto = invertido ? '180' : '0';
+        aplicarTransformCamera(video);
     }
 
     function criarPeerConnectionParaCamera(sessaoUI, iceConfig, cameraSocketId) {
