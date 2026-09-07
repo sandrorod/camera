@@ -472,6 +472,24 @@
         });
 
         connection.on('erro', (mensagem) => {
+            // O caso mais comum é o servidor recusar 'entrarComoCamera' (sessão
+            // inválida/expirada — ex: o dashboard gerou um novo link e este QR
+            // code/link antigo não vale mais). Sem isso, a UI já tinha trocado
+            // para "transmissão iniciada" otimisticamente antes da confirmação
+            // do servidor chegar, e ficava presa nesse estado: botão "Iniciar"
+            // escondido, sem nenhuma forma óbvia de tentar de novo, dando a
+            // impressão de estar "logado" quando na verdade nunca conectou.
+            transmitindo = false;
+            liberarWakeLock();
+            if (heartbeatIntervalId) {
+                clearInterval(heartbeatIntervalId);
+                heartbeatIntervalId = null;
+            }
+            elBtnStart.classList.remove('hidden');
+            elBtnStart.disabled = false;
+            elBtnStop.classList.add('hidden');
+            elConnectionOverlay.classList.remove('hidden');
+            elConnectionOverlay.querySelector('p').textContent = `⚠️ ${mensagem} Peça um novo link/QR code para quem está administrando a transmissão.`;
             definirStatus(`Erro: ${mensagem}`);
         });
 
@@ -515,10 +533,23 @@
             }
 
             if (!connection) {
+                // O servidor de signaling (Render free tier) hiberna após um
+                // período sem tráfego e pode levar de 20 a 50 segundos para
+                // acordar na primeira requisição — sem este aviso, a tela ficava
+                // com a mensagem antiga "Solicitando permissão da câmera..." (já
+                // resolvida) enquanto na real esperava o servidor acordar,
+                // parecendo travada para quem está tentando entrar pelo link/QR.
+                elConnectionOverlay.classList.remove('hidden');
+                elConnectionOverlay.querySelector('p').textContent = 'Conectando ao servidor... Isso pode levar até um minuto na primeira conexão.';
                 await configurarSocket();
             }
 
             connection.emit('entrarComoCamera', { token: config.token, cameraId, ...obterDadosTorcedor() });
+
+            // Cobre o caso de retry após uma falha anterior de conexão (câmera já
+            // capturada com sucesso antes, overlay de erro ainda visível de uma
+            // tentativa que falhou só na parte do socket/servidor).
+            elConnectionOverlay.classList.add('hidden');
 
             transmitindo = true;
             elBtnStart.classList.add('hidden');
@@ -534,8 +565,35 @@
             ajustarTelaCheiaPelaOrientacao(celularEstaVertical());
         } catch (erro) {
             console.error('[Câmera] Erro ao iniciar transmissão:', erro);
-            definirStatus(`Não foi possível acessar a câmera: ${erro.message}`);
+            // Sem isso, o overlay ficava travado exibindo "Solicitando permissão
+            // da câmera..." para sempre por cima do vídeo preto quando algo dava
+            // errado (permissão negada, câmera ocupada por outro app, falha ao
+            // conectar no servidor de signaling) — a mensagem de erro real ficava
+            // só no rodapé (status-message), pequena e fácil de não notar,
+            // enquanto o overlay grande e escuro dava a impressão de estar
+            // travado/carregando indefinidamente. Isso é o que fazia parecer que
+            // "não dá pra entrar" quando na verdade havia um erro específico.
+            elConnectionOverlay.classList.remove('hidden');
+            elConnectionOverlay.querySelector('p').textContent = mensagemDeErroAmigavel(erro);
+            definirStatus(`Não foi possível iniciar a transmissão: ${erro.message}`);
             elBtnStart.disabled = false;
+        }
+    }
+
+    /** Traduz os erros mais comuns de getUserMedia/conexão em mensagens que
+     *  dizem o que fazer, em vez do nome técnico da exceção. */
+    function mensagemDeErroAmigavel(erro) {
+        switch (erro.name) {
+            case 'NotAllowedError':
+                return '⚠️ Permissão de câmera/microfone negada. Ative o acesso nas configurações do navegador e tente novamente.';
+            case 'NotFoundError':
+                return '⚠️ Nenhuma câmera encontrada neste dispositivo.';
+            case 'NotReadableError':
+                return '⚠️ A câmera está sendo usada por outro aplicativo. Feche-o e tente novamente.';
+            case 'OverconstrainedError':
+                return '⚠️ Não foi possível encontrar uma configuração de câmera compatível com este dispositivo.';
+            default:
+                return `⚠️ Não foi possível iniciar a transmissão (${erro.message || erro.name || 'erro desconhecido'}). Toque em "Iniciar Transmissão" para tentar de novo.`;
         }
     }
 

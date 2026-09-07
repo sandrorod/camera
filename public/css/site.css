@@ -639,6 +639,17 @@ html, body {
     transition: transform 0.2s ease;
 }
 
+/* O card tem aspect-ratio 16/9 fixo, mas a câmera pode transmitir em
+   retrato (9/16) — object-fit: cover nesse caso recorta boa parte de
+   cima/baixo da imagem, fazendo o dashboard mostrar só uma área da cena
+   que aparece inteira no celular. Quando a câmera está vertical, troca
+   para "contain" (como o watch.js já faz para #remote-video via
+   .remote-video-vertical) para exibir o enquadramento completo, com
+   barras pretas nas laterais em vez de cortar a imagem. */
+.camera-card-vertical video {
+    object-fit: contain;
+}
+
 .camera-card-label {
     position: absolute;
     bottom: 8px;
