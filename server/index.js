@@ -138,9 +138,33 @@ io.on('connection', (socket) => {
 
         // Primeira câmera a conectar na sessão assume automaticamente o papel de
         // câmera ativa (exibida no link único de visualização) — avisa dashboards
-        // e qualquer observador que já esteja no link único aguardando uma câmera.
+        // e qualquer observador que já esteja no link único aguardando uma câmera,
+        // e pede à câmera que envie um Offer a cada um deles (sem isso, o
+        // observador recebia o aviso de câmera ativa mas ficava esperando um
+        // Offer que nunca chegava, preso em "Conectando à câmera...").
         if (!eraCameraAtiva && sessao.cameraAtivaId === cameraId) {
-            io.to(grupoSessao(token)).emit('cameraAtivaAtualizada', { cameraId });
+            io.in(grupoSessao(token)).fetchSockets().then((sockets) => {
+                sockets.forEach((s) => {
+                    if (!s.seguindoCameraAtiva) return;
+
+                    s.observandoCameraId = cameraId;
+                    sessionStore.adicionarObservador(token, cameraId, s.id);
+                    s.emit('cameraAtivaAtualizada', { cameraId });
+                    socket.emit('novoEspectador', s.id);
+                });
+                notificarContagemObservadores(token, cameraId);
+            });
+
+            sessionStore.listarDashboards(token).forEach((dashboardSocketId) => {
+                io.to(dashboardSocketId).emit('cameraAtivaAtualizada', { cameraId });
+            });
+
+            // Inclui a própria câmera (banner "no ar") e qualquer outra já
+            // conectada na sessão — mantém o comportamento anterior de avisar
+            // todas as câmeras, não só dashboards/observadores.
+            sessionStore.listarCameras(token).forEach((cam) => {
+                io.to(cam.socketId).emit('cameraAtivaAtualizada', { cameraId });
+            });
         }
     });
 
@@ -156,15 +180,26 @@ io.on('connection', (socket) => {
         // atualmente selecionada como ativa na sessão pelo dashboard.
         const cameraIdAlvo = cameraId || sessionStore.obterCameraAtiva(token)?.cameraId;
         const camera = cameraIdAlvo ? sessionStore.obterCameraPorCameraId(token, cameraIdAlvo) : null;
-        if (!camera) {
-            socket.emit('erro', 'Nenhuma câmera conectada no momento.');
-            return;
-        }
 
         socket.join(grupoSessao(token));
         socket.token = token;
         socket.seguindoCameraAtiva = !cameraId;
-        socket.observandoCameraId = cameraIdAlvo;
+        socket.observandoCameraId = cameraIdAlvo || null;
+
+        // Sem câmera ativa no momento (link único aberto antes de qualquer
+        // câmera conectar): antes isso retornava um erro sem entrar no grupo
+        // da sessão, então o observador nunca ficava marcado como
+        // "seguindoCameraAtiva" e não recebia o cameraAtivaAtualizada
+        // disparado quando uma câmera enfim conectasse — a página ficava
+        // presa em "Nenhuma câmera conectada" para sempre, exigindo F5
+        // manual. Ficando no grupo (mesmo sem câmera ainda), o observador é
+        // migrado automaticamente assim que sessionStore.adicionarCamera
+        // definir a primeira câmera ativa (ver 'entrarComoCamera' abaixo).
+        if (!camera) {
+            socket.emit('cameraAtivaAtualizada', { cameraId: null });
+            return;
+        }
+
         sessionStore.adicionarObservador(token, cameraIdAlvo, socket.id);
 
         console.log(`[Observador conectado] token=${token} cameraId=${cameraIdAlvo} socketId=${socket.id}`);
