@@ -12,6 +12,8 @@
 
     const elCamerasGrid = document.getElementById('cameras-grid');
     const elEmptyState = document.getElementById('empty-state');
+    const elEmptyStateTitulo = document.getElementById('empty-state-titulo');
+    const elEmptyStateHint = document.getElementById('empty-state-hint');
     const elLinkAtual = document.getElementById('input-link-atual');
     const elBtnCopiarLink = document.getElementById('btn-copiar-link');
     const elBtnQrcodeLink = document.getElementById('btn-qrcode-link');
@@ -80,7 +82,28 @@
 
     function atualizarEmptyState() {
         const temCameras = sessaoAtual && sessaoAtual.videoElements.size > 0;
+        if (!temCameras) definirEmptyStateCarregando(false);
         elEmptyState.classList.toggle('hidden', !!temCameras);
+    }
+
+    /**
+     * Mostra aviso de "conectando ao servidor" no lugar do empty-state padrão
+     * enquanto aguarda a resposta inicial do servidor de signaling (que pode
+     * levar até ~50s para acordar no Render free tier após período de
+     * inatividade). Sem isso, um F5 no dashboard limpava os cards de câmera
+     * na hora e mostrava só "Nenhuma câmera conectada ainda" — dando a
+     * impressão de que as câmeras realmente desconectaram, quando na real
+     * ainda estavam esperando o servidor voltar a responder.
+     */
+    function definirEmptyStateCarregando(carregando) {
+        if (carregando) {
+            elEmptyStateTitulo.textContent = 'Conectando ao servidor...';
+            elEmptyStateHint.textContent = 'Isso pode levar até um minuto se o servidor estava inativo. As câmeras conectadas devem reaparecer em instantes.';
+        } else {
+            elEmptyStateTitulo.textContent = 'Nenhuma câmera conectada ainda.';
+            elEmptyStateHint.textContent = 'Compartilhe o link ou o QR code acima com o celular que será usado como câmera.';
+        }
+        elEmptyState.classList.remove('hidden');
     }
 
     function linkCameraPara(token) {
@@ -526,13 +549,14 @@
 
         limparCamerasUI();
         atualizarLinks(token);
-        atualizarEmptyState();
+        definirEmptyStateCarregando(true);
 
         const iceConfig = await buscarIceConfig(serverUrl);
         if (sessaoAtual !== sessaoUI) return; // trocado enquanto aguardava
 
         const connection = criarConexaoSocket(serverUrl, (estado, conexaoAtual) => {
             if (estado === 'conectado') {
+                atualizarEmptyState();
                 conexaoAtual.emit('entrarComoDashboard', token);
             }
         });

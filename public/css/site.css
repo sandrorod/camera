@@ -199,6 +199,35 @@ html, body {
     display: none;
 }
 
+.btn-ativar-som {
+    position: absolute;
+    left: 50%;
+    bottom: 32px;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 999px;
+    background: var(--accent-blue);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    animation: pulso-ativar-som 2s ease-in-out infinite;
+}
+
+.btn-ativar-som.hidden {
+    display: none;
+}
+
+@keyframes pulso-ativar-som {
+    0%, 100% { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); }
+    50% { box-shadow: 0 4px 24px rgba(47, 140, 255, 0.6); }
+}
+
 .quality-indicator {
     position: absolute;
     bottom: 16px;
