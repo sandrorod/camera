@@ -65,6 +65,10 @@ app.get('/health', (_req, res) => {
     res.json({ status: 'ok' });
 });
 
+// Rotas legadas do modelo anterior (múltiplas sessões, uma por link gerado
+// sob demanda). O dashboard não as usa mais — ele sempre conecta ao link
+// único fixo via GET /api/link-unico, abaixo. Mantidas por compatibilidade/
+// depuração manual.
 app.post('/api/sessions', (_req, res) => {
     const sessao = sessionStore.criarSessao();
 
@@ -77,6 +81,27 @@ app.post('/api/sessions', (_req, res) => {
 app.get('/api/sessions', async (_req, res) => {
     const tokens = await db.listarTokensDeSessao();
     res.json({ tokens });
+});
+
+// Token do link único fixo da aplicação: sempre o mesmo, para sempre, gerado
+// uma única vez e persistido no Supabase (ver obterOuCriarTokenLinkUnico) —
+// diferente de POST /api/sessions (que cria um token novo a cada chamada),
+// esta rota é idempotente: qualquer dashboard, em qualquer navegador ou
+// dispositivo, que a chame recebe o mesmo token, inclusive após restart do
+// servidor.
+app.get('/api/link-unico', async (_req, res) => {
+    const token = await db.obterOuCriarTokenLinkUnico();
+    if (!token) {
+        return res.status(503).json({ erro: 'Persistência indisponível (Supabase não configurado ou inacessível).' });
+    }
+
+    // Garante que a sessão correspondente já existe em memória, para que
+    // câmeras e observadores possam conectar imediatamente mesmo que o
+    // servidor tenha acabado de subir e nenhuma requisição anterior tenha
+    // "tocado" nesse token ainda.
+    sessionStore.obterSessao(token);
+
+    res.json({ token, iceServers: { stunServers: STUN_SERVERS, turnServers: TURN_SERVERS } });
 });
 
 app.delete('/api/sessions/:token', async (req, res) => {

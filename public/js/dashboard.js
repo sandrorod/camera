@@ -1,11 +1,11 @@
 // dashboard.js
-// Controla o dashboard: mantém um único link ativo por vez (persistido no banco,
-// via API do servidor) para que apareça em qualquer dispositivo, não só no
-// navegador que gerou o link. Ao gerar um novo link, o anterior é removido no
-// servidor e substituído. Abre uma conexão Socket.io para a sessão ativa, cria
-// uma RTCPeerConnection por câmera conectada, e renderiza um card com vídeo para
-// cada uma no grid. Cards aparecem/desaparecem automaticamente conforme câmeras
-// conectam/desconectam.
+// Controla o dashboard: conecta sempre ao mesmo link único fixo da aplicação
+// (GET /api/link-unico — token gerado uma única vez e persistido no servidor,
+// nunca muda), então qualquer navegador/dispositivo que abra o dashboard vê o
+// mesmo link para compartilhar, mesmo após o servidor reiniciar. Abre uma
+// conexão Socket.io para a sessão desse token, cria uma RTCPeerConnection por
+// câmera conectada, e renderiza um card com vídeo para cada uma no grid. Cards
+// aparecem/desaparecem automaticamente conforme câmeras conectam/desconectam.
 
 (function () {
     const serverUrl = window.__SECURITYCAM_CONFIG__.serverUrl;
@@ -15,7 +15,6 @@
     const elLinkAtual = document.getElementById('input-link-atual');
     const elBtnCopiarLink = document.getElementById('btn-copiar-link');
     const elBtnQrcodeLink = document.getElementById('btn-qrcode-link');
-    const elBtnGerarNovoLink = document.getElementById('btn-gerar-novo-link');
     const elQrcodeModal = document.getElementById('qrcode-modal');
     const elQrcodeCanvas = document.getElementById('qrcode-canvas');
     const elBtnFecharQrcodeModal = document.getElementById('btn-fechar-qrcode-modal');
@@ -36,24 +35,6 @@
     /** Estado da única sessão ativa no dashboard. */
     let sessaoAtual = null;
 
-    const CHAVE_TOKEN_ATUAL = 'securitycam:tokenAtual';
-
-    function salvarTokenLocal(token) {
-        try {
-            localStorage.setItem(CHAVE_TOKEN_ATUAL, token);
-        } catch (erro) {
-            console.warn('[Dashboard] Não foi possível salvar o token localmente:', erro);
-        }
-    }
-
-    function lerTokenLocal() {
-        try {
-            return localStorage.getItem(CHAVE_TOKEN_ATUAL);
-        } catch (erro) {
-            return null;
-        }
-    }
-
     /**
      * @typedef {Object} SessaoUI
      * @property {string} token
@@ -67,15 +48,17 @@
      * @property {Map<string, number>} naoLidasPorCamera - cameraId -> contagem de mensagens não lidas
      */
 
-    async function carregarTokensSalvos() {
-        try {
-            const resposta = await fetch(`${serverUrl}/api/sessions`);
-            const dados = await resposta.json();
-            return dados.tokens || [];
-        } catch (erro) {
-            console.error('[Dashboard] Erro ao carregar sessões salvas:', erro);
-            return [];
+    /** Busca o token do link único fixo da aplicação (sempre o mesmo, ver comentário no topo do arquivo). */
+    async function buscarTokenLinkUnico() {
+        const resposta = await fetch(`${serverUrl}/api/link-unico`);
+        if (!resposta.ok) {
+            throw new Error(`Servidor respondeu ${resposta.status} ao buscar o link único.`);
         }
+        const dados = await resposta.json();
+        if (!dados.token) {
+            throw new Error('Servidor não retornou um token válido.');
+        }
+        return dados.token;
     }
 
     function atualizarEmptyState() {
@@ -455,8 +438,6 @@
     }
 
     async function conectarSessao(token) {
-        salvarTokenLocal(token);
-
         const sessaoUI = {
             token,
             connection: null,
@@ -559,55 +540,18 @@
         });
     }
 
-    async function desconectarSessaoAtual() {
-        if (!sessaoAtual) return;
-        const tokenAntigo = sessaoAtual.token;
-
-        if (sessaoAtual.heartbeatIntervalId) clearInterval(sessaoAtual.heartbeatIntervalId);
-        sessaoAtual.peerConnections.forEach((pc) => pc.close());
-        sessaoAtual.connection?.disconnect();
-        sessaoAtual = null;
-        limparCamerasUI();
-
-        try {
-            await fetch(`${serverUrl}/api/sessions/${encodeURIComponent(tokenAntigo)}`, { method: 'DELETE' });
-        } catch (erro) {
-            console.error('[Dashboard] Erro ao remover sessão antiga no servidor:', erro);
-        }
-    }
-
-    async function gerarNovoLink() {
-        await desconectarSessaoAtual();
-
-        const resposta = await fetch(`${serverUrl}/api/sessions`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({})
-        });
-        const dados = await resposta.json();
-        await conectarSessao(dados.token);
-    }
-
-    elBtnGerarNovoLink.addEventListener('click', () => gerarNovoLink());
-
-    // Restaura o link ativo ao carregar a página. O token fica salvo no
-    // localStorage deste navegador (fonte primária, pois o servidor só lista
-    // tokens que já têm câmera conectada); em outro dispositivo sem token local,
-    // cai para o último token com câmeras registradas no servidor. Se nenhum dos
-    // dois existir, gera um novo automaticamente para que o dashboard sempre
-    // tenha um único link ativo pronto para compartilhar.
+    // Conecta ao link único fixo da aplicação (sempre o mesmo token, ver
+    // comentário no topo do arquivo) assim que o dashboard carrega. Sem botão
+    // de "gerar novo link": o token nunca muda, então qualquer navegador ou
+    // dispositivo que abra esta página cai sempre na mesma sessão.
     (async () => {
-        const tokenLocal = lerTokenLocal();
-        if (tokenLocal) {
-            await conectarSessao(tokenLocal);
-            return;
-        }
-
-        const tokens = await carregarTokensSalvos();
-        if (tokens.length > 0) {
-            await conectarSessao(tokens[0]);
-        } else {
-            await gerarNovoLink();
+        try {
+            const token = await buscarTokenLinkUnico();
+            await conectarSessao(token);
+        } catch (erro) {
+            console.error('[Dashboard] Erro ao obter o link único:', erro);
+            elEmptyState.classList.remove('hidden');
+            elEmptyState.querySelector('p').textContent = 'Não foi possível carregar o link. Recarregue a página.';
         }
     })();
 })();
