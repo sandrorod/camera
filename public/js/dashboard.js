@@ -185,8 +185,8 @@
     /** Aplica nome/time no badge de torcedor de um card (criação ou atualização em tempo real). */
     function renderizarDadosTorcedor(elTorcedor, dadosTorcedor) {
         if (dadosTorcedor?.nome || dadosTorcedor?.time) {
-            const partes = [dadosTorcedor.nome, dadosTorcedor.time && `torcendo pro ${dadosTorcedor.time}`].filter(Boolean);
-            elTorcedor.textContent = partes.join(' — ');
+            const partes = [dadosTorcedor.nome, dadosTorcedor.time].filter(Boolean);
+            elTorcedor.textContent = partes.join(' - ');
             elTorcedor.classList.remove('hidden');
         } else {
             elTorcedor.textContent = '';
