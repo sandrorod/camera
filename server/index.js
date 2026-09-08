@@ -65,10 +65,6 @@ app.get('/health', (_req, res) => {
     res.json({ status: 'ok' });
 });
 
-// Rotas legadas do modelo anterior (múltiplas sessões, uma por link gerado
-// sob demanda). O dashboard não as usa mais — ele sempre conecta ao link
-// único fixo via GET /api/link-unico, abaixo. Mantidas por compatibilidade/
-// depuração manual.
 app.post('/api/sessions', (_req, res) => {
     const sessao = sessionStore.criarSessao();
 
@@ -81,48 +77,6 @@ app.post('/api/sessions', (_req, res) => {
 app.get('/api/sessions', async (_req, res) => {
     const tokens = await db.listarTokensDeSessao();
     res.json({ tokens });
-});
-
-// Token do link único fixo da aplicação: sempre o mesmo, para sempre, gerado
-// uma única vez e persistido no Supabase (ver obterOuCriarTokenLinkUnico) —
-// diferente de POST /api/sessions (que cria um token novo a cada chamada),
-// esta rota é idempotente: qualquer dashboard, em qualquer navegador ou
-// dispositivo, que a chame recebe o mesmo token, inclusive após restart do
-// servidor.
-app.get('/api/link-unico', async (_req, res) => {
-    const token = await db.obterOuCriarTokenLinkUnico();
-    if (!token) {
-        return res.status(503).json({ erro: 'Persistência indisponível (Supabase não configurado ou inacessível).' });
-    }
-
-    // Garante que a sessão correspondente já existe em memória, para que
-    // câmeras e observadores possam conectar imediatamente mesmo que o
-    // servidor tenha acabado de subir e nenhuma requisição anterior tenha
-    // "tocado" nesse token ainda.
-    sessionStore.obterSessao(token);
-
-    res.json({ token, iceServers: { stunServers: STUN_SERVERS, turnServers: TURN_SERVERS } });
-});
-
-// Token do link de CÂMERA (camera.html?token=...) — separado do link único de
-// visualização acima. Autoriza a conexão de uma câmera à mesma sessão fixa,
-// mas pode ser regenerado a qualquer momento (revogar o acesso de quem já tem
-// o link, ex: trocar de evento) sem afetar o link de visualização, que
-// continua sempre o mesmo.
-app.get('/api/link-camera', async (_req, res) => {
-    const token = await db.obterOuCriarTokenLinkCamera();
-    if (!token) {
-        return res.status(503).json({ erro: 'Persistência indisponível (Supabase não configurado ou inacessível).' });
-    }
-    res.json({ token });
-});
-
-app.post('/api/link-camera/regenerar', async (_req, res) => {
-    const token = await db.regenerarTokenLinkCamera();
-    if (!token) {
-        return res.status(503).json({ erro: 'Persistência indisponível (Supabase não configurado ou inacessível).' });
-    }
-    res.json({ token });
 });
 
 app.delete('/api/sessions/:token', async (req, res) => {
@@ -153,26 +107,8 @@ app.get('/api/ice-config', (_req, res) => {
 // ----- Socket.io (signaling) -----
 
 io.on('connection', (socket) => {
-    // O token que camera.html envia é o token de CÂMERA (regenerável,
-    // separado do token de sessão/visualização) — precisa bater com o valor
-    // atual salvo para autorizar a entrada. Se bater, todo o resto do fluxo
-    // (sessão, sala, cards) usa o token de sessão fixo internamente, nunca o
-    // token de câmera recebido, já que é só uma chave de autorização, não o
-    // identificador real da sessão.
-    // Nota: regenerar o token de câmera não derruba quem já está transmitindo
-    // no momento — só impede uma NOVA entrada (ou reconexão futura) com o
-    // link antigo. Isso é intencional: evita cortar abruptamente uma
-    // transmissão em andamento só porque o admin gerou um link novo para
-    // outra pessoa.
-    socket.on('entrarComoCamera', async ({ token: tokenCamera, cameraId, nome, time }) => {
-        const tokenCameraAtual = await db.obterOuCriarTokenLinkCamera();
-        if (!tokenCameraAtual || tokenCamera !== tokenCameraAtual) {
-            socket.emit('erro', 'Este link de câmera não é mais válido. Peça um novo link para quem está administrando a transmissão.');
-            return;
-        }
-
-        const token = await db.obterOuCriarTokenLinkUnico();
-        const sessao = token ? sessionStore.obterSessao(token) : null;
+    socket.on('entrarComoCamera', ({ token, cameraId, nome, time }) => {
+        const sessao = sessionStore.obterSessao(token);
 
         if (!sessao || !sessao.ativa || sessionStore.sessaoExpirada(sessao)) {
             socket.emit('erro', 'Sessão inválida, encerrada ou expirada.');
@@ -181,13 +117,6 @@ io.on('connection', (socket) => {
 
         socket.join(grupoSessao(token));
         socket.cameraId = cameraId;
-        // Guardado no próprio socket para que os demais eventos emitidos por
-        // esta câmera (orientacaoAtualizada, heartbeat, atualizarDadosTorcedor,
-        // pararTransmissao, chat) usem o token de SESSÃO real, nunca o token de
-        // câmera que veio no payload de entrarComoCamera — o token de câmera é
-        // só uma credencial de entrada, não o identificador da sessão, e pode
-        // já ter sido regenerado por outra requisição no meio da transmissão.
-        socket.token = token;
         const eraCameraAtiva = sessao.cameraAtivaId;
         sessionStore.adicionarCamera(token, cameraId, socket.id, nome, time);
         db.registrarCamera(token, cameraId, nome).catch((erro) => console.error('[db] Falha ao registrar câmera:', erro));
@@ -361,19 +290,11 @@ io.on('connection', (socket) => {
         io.to(targetSocketId).emit('receberIceCandidate', { senderSocketId: socket.id, candidate });
     });
 
-    // Emitido tanto pela câmera quanto pelo dashboard. O dashboard manda o
-    // token de sessão real no payload (correto, é o que ele conhece); a
-    // câmera manda o token de CÂMERA (usado só para autorizar a entrada) —
-    // por isso, se este socket já se autenticou como câmera, ignoramos o
-    // payload e usamos socket.token (o token de sessão real, guardado em
-    // entrarComoCamera), que é sempre a fonte confiável.
     socket.on('heartbeat', (token) => {
-        sessionStore.atualizarAtividade(socket.token || token);
+        sessionStore.atualizarAtividade(token);
     });
 
-    socket.on('orientacaoAtualizada', ({ vertical, invertido }) => {
-        const token = socket.token;
-        if (!token) return;
+    socket.on('orientacaoAtualizada', ({ token, vertical, invertido }) => {
         sessionStore.atualizarOrientacaoCamera(token, socket.cameraId, vertical, invertido);
         io.to(grupoSessao(token)).emit('orientacaoCameraAtualizada', { cameraId: socket.cameraId, vertical, invertido });
     });
@@ -382,9 +303,8 @@ io.on('connection', (socket) => {
     // no cliente) — sem isso, esses dados só chegavam ao dashboard no momento
     // em que a transmissão era iniciada, então preenchê-los depois de já estar
     // transmitindo nunca aparecia para quem está assistindo.
-    socket.on('atualizarDadosTorcedor', ({ nome, time }) => {
-        const token = socket.token;
-        if (!token || !socket.cameraId) return;
+    socket.on('atualizarDadosTorcedor', ({ token, nome, time }) => {
+        if (!socket.cameraId) return;
         const nomeLimpo = String(nome || '').trim().slice(0, 60) || null;
         const timeLimpo = String(time || '').trim().slice(0, 60) || null;
 
@@ -428,10 +348,7 @@ io.on('connection', (socket) => {
     // Chat individual entre o dashboard e cada câmera, isolado por cameraId —
     // mensagens de uma câmera nunca aparecem na conversa de outra. Efêmero
     // (sem persistência em banco), como o resto do estado da sessão.
-    // Igual ao heartbeat acima: a câmera manda o token de câmera no payload,
-    // então usamos socket.token (token de sessão real) quando disponível.
-    socket.on('enviarMensagemChat', ({ token: tokenPayload, cameraId, remetente, texto }) => {
-        const token = socket.token || tokenPayload;
+    socket.on('enviarMensagemChat', ({ token, cameraId, remetente, texto }) => {
         const textoLimpo = String(texto || '').trim().slice(0, 500);
         if (!textoLimpo) return;
 
@@ -460,15 +377,13 @@ io.on('connection', (socket) => {
         }
     });
 
-    // token recebido no payload é o token de câmera; socket.token (setado em
-    // entrarComoCamera) é o token de sessão real usado para sair da sala.
-    socket.on('pararTransmissao', () => {
+    socket.on('pararTransmissao', (token) => {
         const sessao = sessionStore.removerCameraPorSocketId(socket.id);
         if (sessao) {
             io.to(grupoSessao(sessao.token)).emit('cameraDesconectada', { socketId: socket.id, cameraId: socket.cameraId });
             io.to(grupoSessao(sessao.token)).emit('cameraAtivaAtualizada', { cameraId: sessao.cameraAtivaId });
         }
-        if (socket.token) socket.leave(grupoSessao(socket.token));
+        socket.leave(grupoSessao(token));
     });
 
     // Disparado pelo dashboard ao clicar em "Desconectar" num card: encerra a

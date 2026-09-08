@@ -1,17 +1,11 @@
 // dashboard.js
-// Controla o dashboard. Dois tokens fixos e independentes, ambos persistidos
-// no servidor (nunca em localStorage) para que qualquer navegador/dispositivo
-// veja o mesmo estado:
-//   - token de SESSÃO (GET /api/link-unico): identifica a "sala" onde
-//     câmeras, dashboards e observadores se encontram, e é o token do link de
-//     VISUALIZAÇÃO (watch.html) — nunca muda, para sempre.
-//   - token de CÂMERA (GET/POST /api/link-camera): autoriza camera.html a
-//     entrar nessa sessão fixa. Pode ser regenerado a qualquer momento (botão
-//     "Atualizar link") sem afetar o link de visualização.
-// Abre uma conexão Socket.io para a sessão, cria uma RTCPeerConnection por
-// câmera conectada, e renderiza um card com vídeo para cada uma no grid.
-// Cards aparecem/desaparecem automaticamente conforme câmeras conectam/
-// desconectam.
+// Controla o dashboard: mantém um único link ativo por vez (persistido no banco,
+// via API do servidor) para que apareça em qualquer dispositivo, não só no
+// navegador que gerou o link. Ao gerar um novo link, o anterior é removido no
+// servidor e substituído. Abre uma conexão Socket.io para a sessão ativa, cria
+// uma RTCPeerConnection por câmera conectada, e renderiza um card com vídeo para
+// cada uma no grid. Cards aparecem/desaparecem automaticamente conforme câmeras
+// conectam/desconectam.
 
 (function () {
     const serverUrl = window.__SECURITYCAM_CONFIG__.serverUrl;
@@ -42,6 +36,24 @@
     /** Estado da única sessão ativa no dashboard. */
     let sessaoAtual = null;
 
+    const CHAVE_TOKEN_ATUAL = 'securitycam:tokenAtual';
+
+    function salvarTokenLocal(token) {
+        try {
+            localStorage.setItem(CHAVE_TOKEN_ATUAL, token);
+        } catch (erro) {
+            console.warn('[Dashboard] Não foi possível salvar o token localmente:', erro);
+        }
+    }
+
+    function lerTokenLocal() {
+        try {
+            return localStorage.getItem(CHAVE_TOKEN_ATUAL);
+        } catch (erro) {
+            return null;
+        }
+    }
+
     /**
      * @typedef {Object} SessaoUI
      * @property {string} token
@@ -55,45 +67,15 @@
      * @property {Map<string, number>} naoLidasPorCamera - cameraId -> contagem de mensagens não lidas
      */
 
-    /** Busca o token do link único de sessão/visualização (sempre o mesmo, ver comentário no topo do arquivo). */
-    async function buscarTokenLinkUnico() {
-        const resposta = await fetch(`${serverUrl}/api/link-unico`);
-        if (!resposta.ok) {
-            throw new Error(`Servidor respondeu ${resposta.status} ao buscar o link único.`);
+    async function carregarTokensSalvos() {
+        try {
+            const resposta = await fetch(`${serverUrl}/api/sessions`);
+            const dados = await resposta.json();
+            return dados.tokens || [];
+        } catch (erro) {
+            console.error('[Dashboard] Erro ao carregar sessões salvas:', erro);
+            return [];
         }
-        const dados = await resposta.json();
-        if (!dados.token) {
-            throw new Error('Servidor não retornou um token válido.');
-        }
-        return dados.token;
-    }
-
-    /** Busca o token do link de câmera atual (separado do de sessão, regenerável). */
-    async function buscarTokenLinkCamera() {
-        const resposta = await fetch(`${serverUrl}/api/link-camera`);
-        if (!resposta.ok) {
-            throw new Error(`Servidor respondeu ${resposta.status} ao buscar o link de câmera.`);
-        }
-        const dados = await resposta.json();
-        if (!dados.token) {
-            throw new Error('Servidor não retornou um token válido.');
-        }
-        return dados.token;
-    }
-
-    /** Gera um novo token de câmera, invalidando o atual — quem já tinha o link
-     *  anterior não consegue mais conectar (ver validação em entrarComoCamera
-     *  no servidor). Não afeta o link de visualização, que continua o mesmo. */
-    async function regenerarTokenLinkCamera() {
-        const resposta = await fetch(`${serverUrl}/api/link-camera/regenerar`, { method: 'POST' });
-        if (!resposta.ok) {
-            throw new Error(`Servidor respondeu ${resposta.status} ao gerar um novo link de câmera.`);
-        }
-        const dados = await resposta.json();
-        if (!dados.token) {
-            throw new Error('Servidor não retornou um token válido.');
-        }
-        return dados.token;
     }
 
     function atualizarEmptyState() {
@@ -129,12 +111,12 @@
         });
     }
 
-    function mostrarFeedbackCopiado(elBotao, texto = '✅ Copiado!') {
+    function mostrarFeedbackCopiado(elBotao) {
         if (elBotao.dataset.feedbackAtivo) return;
         elBotao.dataset.feedbackAtivo = '1';
 
         const textoOriginal = elBotao.textContent;
-        elBotao.textContent = texto;
+        elBotao.textContent = '✅ Copiado!';
         elBotao.classList.add('btn-copiado');
 
         setTimeout(() => {
@@ -162,9 +144,8 @@
         }, 1500);
     }
 
-    /** token aqui é o token de CÂMERA, não o de sessão. */
-    function atualizarLinkCameraExibido(tokenCamera) {
-        elLinkAtual.value = linkCameraPara(tokenCamera);
+    function atualizarLinks(token) {
+        elLinkAtual.value = linkCameraPara(token);
     }
 
     function abrirQrcodeModal(link) {
@@ -191,24 +172,6 @@
 
     elBtnCopiarLink.addEventListener('click', () => copiarTexto(elLinkAtual.value, elBtnCopiarLink));
     elBtnQrcodeLink.addEventListener('click', () => abrirQrcodeModal(elLinkAtual.value));
-
-    elBtnGerarNovoLink.addEventListener('click', async () => {
-        if (!confirm('Gerar um novo link de câmera? Quem já tiver o link atual não vai mais conseguir conectar com ele — o link de visualização/assistir continua o mesmo.')) {
-            return;
-        }
-
-        elBtnGerarNovoLink.disabled = true;
-        try {
-            const tokenCamera = await regenerarTokenLinkCamera();
-            atualizarLinkCameraExibido(tokenCamera);
-            mostrarFeedbackCopiado(elBtnGerarNovoLink, '✅ Novo link gerado!');
-        } catch (erro) {
-            console.error('[Dashboard] Erro ao gerar novo link de câmera:', erro);
-            alert('Não foi possível gerar um novo link. Tente novamente.');
-        } finally {
-            elBtnGerarNovoLink.disabled = false;
-        }
-    });
     elBtnFecharQrcodeModal.addEventListener('click', fecharQrcodeModal);
     elQrcodeModal.querySelector('.qrcode-modal-backdrop').addEventListener('click', fecharQrcodeModal);
     document.addEventListener('keydown', (event) => {
@@ -546,6 +509,8 @@
     }
 
     async function conectarSessao(token) {
+        salvarTokenLocal(token);
+
         const sessaoUI = {
             token,
             connection: null,
@@ -560,6 +525,7 @@
         sessaoAtual = sessaoUI;
 
         limparCamerasUI();
+        atualizarLinks(token);
         atualizarEmptyState();
 
         const iceConfig = await buscarIceConfig(serverUrl);
@@ -651,21 +617,55 @@
         });
     }
 
-    // Ao carregar: busca os dois tokens fixos em paralelo. O de sessão conecta
-    // o dashboard (nunca muda); o de câmera só popula o campo de link exibido
-    // (pode ser regenerado a qualquer momento pelo botão "Atualizar link").
-    (async () => {
+    async function desconectarSessaoAtual() {
+        if (!sessaoAtual) return;
+        const tokenAntigo = sessaoAtual.token;
+
+        if (sessaoAtual.heartbeatIntervalId) clearInterval(sessaoAtual.heartbeatIntervalId);
+        sessaoAtual.peerConnections.forEach((pc) => pc.close());
+        sessaoAtual.connection?.disconnect();
+        sessaoAtual = null;
+        limparCamerasUI();
+
         try {
-            const [token, tokenCamera] = await Promise.all([
-                buscarTokenLinkUnico(),
-                buscarTokenLinkCamera()
-            ]);
-            atualizarLinkCameraExibido(tokenCamera);
-            await conectarSessao(token);
+            await fetch(`${serverUrl}/api/sessions/${encodeURIComponent(tokenAntigo)}`, { method: 'DELETE' });
         } catch (erro) {
-            console.error('[Dashboard] Erro ao obter os links:', erro);
-            elEmptyState.classList.remove('hidden');
-            elEmptyState.querySelector('p').textContent = 'Não foi possível carregar o link. Recarregue a página.';
+            console.error('[Dashboard] Erro ao remover sessão antiga no servidor:', erro);
+        }
+    }
+
+    async function gerarNovoLink() {
+        await desconectarSessaoAtual();
+
+        const resposta = await fetch(`${serverUrl}/api/sessions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        const dados = await resposta.json();
+        await conectarSessao(dados.token);
+    }
+
+    elBtnGerarNovoLink.addEventListener('click', () => gerarNovoLink());
+
+    // Restaura o link ativo ao carregar a página. O token fica salvo no
+    // localStorage deste navegador (fonte primária, pois o servidor só lista
+    // tokens que já têm câmera conectada); em outro dispositivo sem token local,
+    // cai para o último token com câmeras registradas no servidor. Se nenhum dos
+    // dois existir, gera um novo automaticamente para que o dashboard sempre
+    // tenha um único link ativo pronto para compartilhar.
+    (async () => {
+        const tokenLocal = lerTokenLocal();
+        if (tokenLocal) {
+            await conectarSessao(tokenLocal);
+            return;
+        }
+
+        const tokens = await carregarTokensSalvos();
+        if (tokens.length > 0) {
+            await conectarSessao(tokens[0]);
+        } else {
+            await gerarNovoLink();
         }
     })();
 })();
