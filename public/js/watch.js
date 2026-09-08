@@ -64,7 +64,16 @@
         elBtnAtivarSom.classList.add('hidden');
     });
 
-    function criarPeerConnection() {
+    /**
+     * @param {string} targetSocketId - socketId da câmera dona desta PC, fixado
+     * no momento da criação (nunca lido de uma variável externa mutável) — sem
+     * isso, um ICE candidate gerado de forma assíncrona por uma PC antiga
+     * (mesmo após close(), o navegador pode disparar onicecandidate um pouco
+     * depois) era enviado para a câmera NOVA (cameraSocketId global já
+     * atualizado), quebrando a negociação ICE da conexão nova e prendendo o
+     * link em "Conectando à câmera..." ao trocar de câmera ativa.
+     */
+    function criarPeerConnection(targetSocketId) {
         const pc = new RTCPeerConnection({ iceServers: montarIceServers(iceConfig) });
 
         pc.ontrack = (event) => {
@@ -76,9 +85,9 @@
         };
 
         pc.onicecandidate = (event) => {
-            if (event.candidate && cameraSocketId) {
+            if (event.candidate) {
                 connection.emit('enviarIceCandidate', {
-                    targetSocketId: cameraSocketId,
+                    targetSocketId,
                     candidate: event.candidate
                 });
             }
@@ -108,7 +117,7 @@
             if (peerConnection) {
                 peerConnection.close();
             }
-            peerConnection = criarPeerConnection();
+            peerConnection = criarPeerConnection(senderSocketId);
 
             await peerConnection.setRemoteDescription(new RTCSessionDescription(sdpOffer));
 
@@ -118,8 +127,12 @@
             connection.emit('enviarAnswer', { targetSocketId: senderSocketId, sdpAnswer: answer });
         });
 
-        connection.on('receberIceCandidate', async ({ candidate }) => {
-            if (!peerConnection) return;
+        connection.on('receberIceCandidate', async ({ senderSocketId, candidate }) => {
+            // Ignora candidates de uma câmera que não é mais a atual — podem
+            // chegar atrasados após trocar de câmera ativa (ver comentário em
+            // criarPeerConnection) e quebrariam a negociação ICE da PC nova se
+            // aplicados nela.
+            if (!peerConnection || senderSocketId !== cameraSocketId) return;
             try {
                 await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
             } catch (erro) {
