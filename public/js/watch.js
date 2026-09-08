@@ -13,7 +13,6 @@
 
     const elRemoteVideo = document.getElementById('remote-video');
     const elConnectionOverlay = document.getElementById('connection-overlay');
-    const elBtnAtivarSom = document.getElementById('btn-ativar-som');
 
     let connection = null;
     let peerConnection = null;
@@ -41,28 +40,24 @@
 
     /**
      * Navegadores bloqueiam autoplay de vídeo com áudio sem interação prévia
-     * do usuário. Se isso acontecer, reproduz mutado e mostra um botão visível
-     * para ativar o som manualmente — antes o toque valia em qualquer lugar da
-     * tela sem nenhum indício visual, então quem deixa a página só de
-     * monitoramento passivo (sem nunca tocar a tela) achava que "não tem
-     * áudio" quando na real só nunca foi ativado.
+     * do usuário. Se isso acontecer, reproduz mutado e ativa o som no primeiro
+     * toque na tela — assim o vídeo nunca trava esperando uma ação explícita.
      */
     function tentarReproduzirComAudio() {
         elRemoteVideo.muted = false;
-        elBtnAtivarSom.classList.add('hidden');
-
         elRemoteVideo.play().catch(() => {
             elRemoteVideo.muted = true;
             elRemoteVideo.play().catch(() => {});
-            elBtnAtivarSom.classList.remove('hidden');
+
+            const ativarSom = () => {
+                elRemoteVideo.muted = false;
+                document.removeEventListener('click', ativarSom);
+                document.removeEventListener('touchend', ativarSom);
+            };
+            document.addEventListener('click', ativarSom, { once: true });
+            document.addEventListener('touchend', ativarSom, { once: true });
         });
     }
-
-    elBtnAtivarSom.addEventListener('click', () => {
-        elRemoteVideo.muted = false;
-        elRemoteVideo.play().catch(() => {});
-        elBtnAtivarSom.classList.add('hidden');
-    });
 
     /**
      * @param {string} targetSocketId - socketId da câmera dona desta PC, fixado

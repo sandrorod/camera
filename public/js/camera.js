@@ -457,6 +457,19 @@
             }
         });
 
+        // Disparado quando o observador do link único deixa de assistir esta
+        // câmera (foi deselecionada, ou trocou para outra) — encerra a PC
+        // dedicada a ele para não deixar uma conexão "zumbi" aberta, que
+        // atrapalhava a negociação ICE caso o mesmo observador voltasse a
+        // assistir esta câmera depois.
+        connection.on('encerrarConexaoComObservador', (observadorSocketId) => {
+            const pc = peerConnections.get(observadorSocketId);
+            if (pc) {
+                pc.close();
+                peerConnections.delete(observadorSocketId);
+            }
+        });
+
         connection.on('receberAnswer', async ({ senderSocketId, sdpAnswer }) => {
             const pc = peerConnections.get(senderSocketId);
             // Ignora Answers que cheguem fora de ordem (ex: dashboard reenviou
