@@ -376,13 +376,18 @@
      * adiciona as tracks locais e envia o Offer SDP via Socket.io.
      */
     async function criarPeerConnectionParaDashboard(dashboardSocketId) {
-        // O servidor pode reenviar "novoEspectador" para o mesmo dashboard (ex:
-        // ele reconectou e a câmera ainda está marcada como ativa). Reaproveitar
-        // uma PC que já está negociando/conectada evita Offers duplicados e
-        // Answers chegando fora de ordem em PCs diferentes para o mesmo destino.
+        // O servidor reenvia "novoEspectador" sempre que o observador do outro
+        // lado precisa de uma conexão nova — ex: reconectou, ou (no link único
+        // de visualização) voltou a seguir esta câmera depois de ter
+        // acompanhado outra. Nesse último caso o observador já fechou sua PC
+        // antiga e criou uma vazia esperando um Offer nesta; reaproveitar a PC
+        // velha aqui (achando que "já está conectada") nunca reenviava esse
+        // Offer, e o observador ficava preso em "Conectando à câmera..." para
+        // sempre. Por isso sempre fechamos a antiga e recriamos do zero.
         const pcExistente = peerConnections.get(dashboardSocketId);
-        if (pcExistente && pcExistente.connectionState !== 'failed' && pcExistente.connectionState !== 'closed') {
-            return pcExistente;
+        if (pcExistente) {
+            pcExistente.close();
+            peerConnections.delete(dashboardSocketId);
         }
 
         const pc = new RTCPeerConnection({ iceServers: montarIceServers(iceConfig) });
