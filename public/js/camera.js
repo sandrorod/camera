@@ -56,7 +56,7 @@
     const peerConnections = new Map();
 
     let iceConfig = { stunServers: [], turnServers: [] };
-    let facingModeAtual = 'environment'; // câmera traseira por padrão
+    let facingModeAtual = 'user'; // câmera frontal por padrão
     let transmitindo = false;
     let connection = null;
     let heartbeatIntervalId = null;

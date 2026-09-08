@@ -23,7 +23,7 @@ persistente — necessário para o signaling do WebRTC.
 2. O link gerado (`camera.html?token=...`) é exibido para cópia/compartilhamento.
    Envie-o para cada celular que será usado como câmera, via WhatsApp/QR Code.
 3. Cada celular que abre o link e clica em "Iniciar Transmissão" entra na mesma
-   sessão (`entrarComoCamera`) e a câmera traseira é ativada.
+   sessão (`entrarComoCamera`) e a câmera frontal é ativada.
 4. O dashboard recebe `novaCameraConectada` e a câmera recebe o aviso para criar
    uma `RTCPeerConnection` dedicada, enviando um SDP Offer ao dashboard.
 5. O dashboard responde com SDP Answer; ambos trocam ICE Candidates via Socket.io
