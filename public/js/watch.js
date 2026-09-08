@@ -15,10 +15,19 @@
     const elConnectionOverlay = document.getElementById('connection-overlay');
 
     let connection = null;
-    let peerConnection = null;
-    let cameraSocketId = null;
     let cameraIdAtual = config.cameraId || null;
     let iceConfig = { stunServers: [], turnServers: [] };
+
+    /**
+     * PCs mantidas vivas por cameraId, mesmo quando a câmera deixa de ser a
+     * exibida no momento (deselecionada, ou trocada por outra) — sem isso,
+     * toda troca fechava e recriava a conexão do zero, obrigando um novo
+     * handshake ICE completo (coleta de candidates STUN/TURN + teste de
+     * conectividade), que sozinho já leva vários segundos. Reselecionar uma
+     * câmera cuja PC ainda está viva aqui reaproveita o stream na hora, sem
+     * esperar handshake nenhum.
+     */
+    const peerConnectionsPorCamera = new Map();
 
     /** Soma o ângulo automático (câmera invertida em paisagem) com a rotação
      *  manual (botão girar do dashboard) num só transform no vídeo. */
@@ -59,7 +68,17 @@
         });
     }
 
+    /** Exibe o stream de uma câmera já conectada e pronta, sem nenhum handshake. */
+    function exibirStream(stream) {
+        if (elRemoteVideo.srcObject !== stream) {
+            elRemoteVideo.srcObject = stream;
+        }
+        definirOverlay(null);
+        tentarReproduzirComAudio();
+    }
+
     /**
+     * @param {string} cameraId
      * @param {string} targetSocketId - socketId da câmera dona desta PC, fixado
      * no momento da criação (nunca lido de uma variável externa mutável) — sem
      * isso, um ICE candidate gerado de forma assíncrona por uma PC antiga
@@ -68,14 +87,18 @@
      * atualizado), quebrando a negociação ICE da conexão nova e prendendo o
      * link em "Conectando à câmera..." ao trocar de câmera ativa.
      */
-    function criarPeerConnection(targetSocketId) {
+    function criarPeerConnection(cameraId, targetSocketId) {
         const pc = new RTCPeerConnection({ iceServers: montarIceServers(iceConfig) });
+        const entrada = { pc, stream: null, targetSocketId };
+        peerConnectionsPorCamera.set(cameraId, entrada);
 
         pc.ontrack = (event) => {
-            if (elRemoteVideo.srcObject !== event.streams[0]) {
-                elRemoteVideo.srcObject = event.streams[0];
-                definirOverlay(null);
-                tentarReproduzirComAudio();
+            entrada.stream = event.streams[0];
+            // Só atualiza a tela se esta ainda for a câmera atualmente
+            // selecionada — a PC pode ter recebido a track em background
+            // (mantida viva após uma troca) sem estar em exibição no momento.
+            if (cameraId === cameraIdAtual) {
+                exibirStream(entrada.stream);
             }
         };
 
@@ -89,7 +112,10 @@
         };
 
         pc.onconnectionstatechange = () => {
-            console.info('[WebRTC] Estado da conexão com a câmera:', pc.connectionState);
+            console.info(`[WebRTC] Estado da conexão com a câmera ${cameraId}:`, pc.connectionState);
+            if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+                peerConnectionsPorCamera.delete(cameraId);
+            }
         };
 
         return pc;
@@ -106,30 +132,44 @@
             }
         });
 
+        // O servidor identifica a câmera de origem só pelo socketId (Offer não
+        // carrega cameraId) — como cada RTCPeerConnection agora é mantida viva
+        // por cameraId (ver peerConnectionsPorCamera), guardamos qual cameraId
+        // corresponde a cada socketId de câmera visto, pra rotear o Offer/ICE
+        // recebido pra entrada certa do Map em vez de uma única PC global.
+        const cameraIdPorSocketId = new Map();
+
         connection.on('receberOffer', async ({ senderSocketId, sdpOffer }) => {
-            cameraSocketId = senderSocketId;
+            // Descobre a qual câmera este socketId pertence: é o cameraId que
+            // acabamos de marcar como atual (cameraAtivaAtualizada roda antes
+            // do servidor pedir o Offer) ou, numa renegociação de uma câmera
+            // já conhecida, o que já estava associado a esse socketId.
+            const cameraId = cameraIdPorSocketId.get(senderSocketId) ?? cameraIdAtual;
+            cameraIdPorSocketId.set(senderSocketId, cameraId);
 
-            if (peerConnection) {
-                peerConnection.close();
+            const existente = peerConnectionsPorCamera.get(cameraId);
+            if (existente) {
+                existente.pc.close();
             }
-            peerConnection = criarPeerConnection(senderSocketId);
+            const pc = criarPeerConnection(cameraId, senderSocketId);
 
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(sdpOffer));
+            await pc.setRemoteDescription(new RTCSessionDescription(sdpOffer));
 
-            const answer = await peerConnection.createAnswer();
-            await peerConnection.setLocalDescription(answer);
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
 
             connection.emit('enviarAnswer', { targetSocketId: senderSocketId, sdpAnswer: answer });
         });
 
         connection.on('receberIceCandidate', async ({ senderSocketId, candidate }) => {
-            // Ignora candidates de uma câmera que não é mais a atual — podem
-            // chegar atrasados após trocar de câmera ativa (ver comentário em
-            // criarPeerConnection) e quebrariam a negociação ICE da PC nova se
-            // aplicados nela.
-            if (!peerConnection || senderSocketId !== cameraSocketId) return;
+            const cameraId = cameraIdPorSocketId.get(senderSocketId);
+            const entrada = cameraId ? peerConnectionsPorCamera.get(cameraId) : null;
+            // Ignora candidates de uma PC que não é (mais) a registrada para
+            // este socketId — podem chegar atrasados após uma renegociação e
+            // quebrariam a conexão nova se aplicados nela.
+            if (!entrada || entrada.targetSocketId !== senderSocketId) return;
             try {
-                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                await entrada.pc.addIceCandidate(new RTCIceCandidate(candidate));
             } catch (erro) {
                 console.error('[WebRTC] Erro ao adicionar ICE candidate:', erro);
             }
@@ -154,11 +194,12 @@
         });
 
         connection.on('cameraDesconectada', ({ cameraId }) => {
-            if (cameraId !== cameraIdAtual) return;
-            if (peerConnection) {
-                peerConnection.close();
-                peerConnection = null;
+            const entrada = peerConnectionsPorCamera.get(cameraId);
+            if (entrada) {
+                entrada.pc.close();
+                peerConnectionsPorCamera.delete(cameraId);
             }
+            if (cameraId !== cameraIdAtual) return;
             elRemoteVideo.srcObject = null;
             definirOverlay('A câmera foi desconectada.');
         });
@@ -170,10 +211,19 @@
             if (config.cameraId || cameraId === cameraIdAtual) return;
 
             cameraIdAtual = cameraId;
-            if (peerConnection) {
-                peerConnection.close();
-                peerConnection = null;
+
+            // Deliberadamente NÃO fecha a PC da câmera anterior — ela continua
+            // recebendo vídeo em background, pronta para reaparecer na hora se
+            // o usuário voltar a selecioná-la (evita refazer o handshake ICE
+            // completo, que sozinho leva vários segundos).
+            const entrada = cameraId ? peerConnectionsPorCamera.get(cameraId) : null;
+            if (entrada?.stream) {
+                // Já temos uma conexão viva e com vídeo para esta câmera —
+                // exibe na hora, sem esperar nenhum Offer/handshake novo.
+                exibirStream(entrada.stream);
+                return;
             }
+
             elRemoteVideo.srcObject = null;
 
             if (!cameraId) {

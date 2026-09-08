@@ -237,19 +237,12 @@ io.on('connection', (socket) => {
             sockets.forEach((s) => {
                 if (!s.seguindoCameraAtiva || s.observandoCameraId === cameraId) return;
 
-                // Avisa a câmera que estava atendendo este observador (seja
-                // qual for) a encerrar aquela RTCPeerConnection específica —
-                // sem isso, ao deselecionar uma câmera (cameraId null) ela
-                // nunca soube que o observador parou de escutar, e ficava com
-                // uma PC "zumbi" aberta. Reselecionar a mesma câmera depois
-                // reenviava novoEspectador com o mesmo socketId, mas a
-                // negociação ICE a partir de uma PC zumbi nem sempre
-                // reconectava de primeira — só depois de várias tentativas.
-                const cameraAnterior = s.observandoCameraId ? sessionStore.obterCameraPorCameraId(token, s.observandoCameraId) : null;
-                if (cameraAnterior) {
-                    io.to(cameraAnterior.socketId).emit('encerrarConexaoComObservador', s.id);
-                }
-
+                // Deliberadamente NÃO avisa a câmera anterior a encerrar a
+                // conexão com este observador — o cliente (watch.js) mantém
+                // essa RTCPeerConnection viva em background para reaparecer
+                // instantaneamente se o observador voltar a selecioná-la,
+                // evitando refazer o handshake ICE completo (que sozinho leva
+                // vários segundos) a cada troca.
                 sessionStore.removerObservadorPorSocketId(s.id);
                 s.observandoCameraId = cameraId;
                 if (cameraId) sessionStore.adicionarObservador(token, cameraId, s.id);

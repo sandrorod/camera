@@ -376,18 +376,15 @@
      * adiciona as tracks locais e envia o Offer SDP via Socket.io.
      */
     async function criarPeerConnectionParaDashboard(dashboardSocketId) {
-        // O servidor reenvia "novoEspectador" sempre que o observador do outro
-        // lado precisa de uma conexão nova — ex: reconectou, ou (no link único
-        // de visualização) voltou a seguir esta câmera depois de ter
-        // acompanhado outra. Nesse último caso o observador já fechou sua PC
-        // antiga e criou uma vazia esperando um Offer nesta; reaproveitar a PC
-        // velha aqui (achando que "já está conectada") nunca reenviava esse
-        // Offer, e o observador ficava preso em "Conectando à câmera..." para
-        // sempre. Por isso sempre fechamos a antiga e recriamos do zero.
+        // O servidor pode reenviar "novoEspectador" para o mesmo destino (ex:
+        // no link único de visualização, o observador voltou a seguir esta
+        // câmera depois de ter acompanhado outra, mantendo a conexão anterior
+        // viva do lado dele — ver watch.js). Reaproveitar uma PC que já está
+        // conectada evita um handshake ICE completo novo (que sozinho leva
+        // vários segundos), fazendo a câmera reaparecer instantaneamente.
         const pcExistente = peerConnections.get(dashboardSocketId);
-        if (pcExistente) {
-            pcExistente.close();
-            peerConnections.delete(dashboardSocketId);
+        if (pcExistente && pcExistente.connectionState !== 'failed' && pcExistente.connectionState !== 'closed') {
+            return pcExistente;
         }
 
         const pc = new RTCPeerConnection({ iceServers: montarIceServers(iceConfig) });
@@ -454,19 +451,6 @@
                 await criarPeerConnectionParaDashboard(dashboardSocketId);
             } catch (erro) {
                 console.error('[WebRTC] Erro ao conectar com o dashboard:', erro);
-            }
-        });
-
-        // Disparado quando o observador do link único deixa de assistir esta
-        // câmera (foi deselecionada, ou trocou para outra) — encerra a PC
-        // dedicada a ele para não deixar uma conexão "zumbi" aberta, que
-        // atrapalhava a negociação ICE caso o mesmo observador voltasse a
-        // assistir esta câmera depois.
-        connection.on('encerrarConexaoComObservador', (observadorSocketId) => {
-            const pc = peerConnections.get(observadorSocketId);
-            if (pc) {
-                pc.close();
-                peerConnections.delete(observadorSocketId);
             }
         });
 
