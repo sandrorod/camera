@@ -103,6 +103,21 @@ function adicionarCamera(token, cameraId, socketId, nome, time) {
 }
 
 /**
+ * Atualiza nome/time do torcedor de uma câmera já conectada, sem mexer no
+ * resto do estado (orientação, rotação, etc.) — usado quando a pessoa edita
+ * os campos depois de já ter iniciado a transmissão. Retorna a câmera
+ * atualizada, ou null se ela não existir.
+ */
+function atualizarDadosTorcedor(token, cameraId, nome, time) {
+    const sessao = obterSessao(token);
+    const cam = sessao?.cameras.get(cameraId);
+    if (!cam) return null;
+    cam.nome = nome;
+    cam.time = time;
+    return cam;
+}
+
+/**
  * Define qual câmera é exibida no link de visualização único da sessão
  * (watch.html?token=...). cameraId null limpa a seleção (nenhuma câmera
  * ativa) — usado ao "deselecionar" a câmera atualmente ativa. Retorna a
@@ -302,6 +317,7 @@ module.exports = {
     obterSessao,
     sessaoExpirada,
     adicionarCamera,
+    atualizarDadosTorcedor,
     definirCameraAtiva,
     obterCameraAtiva,
     atualizarOrientacaoCamera,

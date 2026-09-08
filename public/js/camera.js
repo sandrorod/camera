@@ -606,6 +606,25 @@
         }, 30000);
     }
 
+    /**
+     * Envia nome/time atualizados ao servidor conforme a pessoa digita, com
+     * debounce de 600ms para não emitir um evento a cada tecla. Sem isso,
+     * esses dados só eram enviados no momento de iniciar a transmissão —
+     * preenchê-los ou corrigi-los depois nunca chegava ao dashboard.
+     */
+    let debounceDadosTorcedorId = null;
+    function agendarEnvioDadosTorcedor() {
+        if (!transmitindo || !connection?.connected) return;
+
+        if (debounceDadosTorcedorId) clearTimeout(debounceDadosTorcedorId);
+        debounceDadosTorcedorId = setTimeout(() => {
+            connection.emit('atualizarDadosTorcedor', { token: config.token, ...obterDadosTorcedor() });
+        }, 600);
+    }
+
+    elInputNomeTorcedor.addEventListener('input', agendarEnvioDadosTorcedor);
+    elInputTimeTorcedor.addEventListener('input', agendarEnvioDadosTorcedor);
+
     async function pararTransmissao(notificarServidor = true) {
         transmitindo = false;
         liberarWakeLock();

@@ -165,6 +165,18 @@
         elCamerasGrid.innerHTML = '';
     }
 
+    /** Aplica nome/time no badge de torcedor de um card (criação ou atualização em tempo real). */
+    function renderizarDadosTorcedor(elTorcedor, dadosTorcedor) {
+        if (dadosTorcedor?.nome || dadosTorcedor?.time) {
+            const partes = [dadosTorcedor.nome, dadosTorcedor.time && `torcendo pro ${dadosTorcedor.time}`].filter(Boolean);
+            elTorcedor.textContent = partes.join(' — ');
+            elTorcedor.classList.remove('hidden');
+        } else {
+            elTorcedor.textContent = '';
+            elTorcedor.classList.add('hidden');
+        }
+    }
+
     function criarCardCamera(sessaoUI, cameraSocketId, cameraId, dadosTorcedor) {
         if (sessaoUI.videoElements.has(cameraSocketId)) {
             return sessaoUI.videoElements.get(cameraSocketId);
@@ -176,11 +188,7 @@
         const video = fragment.querySelector('video');
         const elTorcedor = fragment.querySelector('.camera-card-torcedor');
 
-        if (dadosTorcedor?.nome || dadosTorcedor?.time) {
-            const partes = [dadosTorcedor.nome, dadosTorcedor.time && `torcendo pro ${dadosTorcedor.time}`].filter(Boolean);
-            elTorcedor.textContent = partes.join(' — ');
-            elTorcedor.classList.remove('hidden');
-        }
+        renderizarDadosTorcedor(elTorcedor, dadosTorcedor);
         const elBtnSelecionar = fragment.querySelector('.btn-selecionar-camera');
         const elBtnCopiarCameraIndividual = fragment.querySelector('.btn-copiar-camera-individual');
         const elBtnCopiarCameraLink = fragment.querySelector('.btn-copiar-camera-link');
@@ -373,6 +381,31 @@
         const anguloManual = Number(video.dataset.anguloManual || '0');
         const total = (anguloAuto + anguloManual) % 360;
         video.style.transform = total ? `rotate(${total}deg)` : '';
+        ajustarProporcaoCard(video);
+    }
+
+    /**
+     * Ajusta o aspect-ratio do .camera-card para a proporção real do vídeo
+     * recebido (em vez do 16/9 fixo do CSS) — sem isso, uma câmera em
+     * qualquer proporção diferente de 16:9 (retrato, ou paisagem 4:3 comum
+     * em muitos celulares) sobrava bastante área preta dentro do card com
+     * object-fit: contain, fazendo a imagem parecer pequena/distante. Com o
+     * card ajustado à proporção do vídeo, a imagem preenche o quadro
+     * inteiro sem cortar nada (sem "zoom") e sem sobrar espaço morto.
+     * Considera rotação manual de 90°/270°, que troca largura por altura
+     * visualmente (a automática nunca faz isso — só gira 180°).
+     */
+    function ajustarProporcaoCard(video) {
+        const { videoWidth, videoHeight } = video;
+        if (!videoWidth || !videoHeight) return;
+
+        const anguloManual = Number(video.dataset.anguloManual || '0') % 360;
+        const rotacionado90 = anguloManual === 90 || anguloManual === 270;
+        const largura = rotacionado90 ? videoHeight : videoWidth;
+        const altura = rotacionado90 ? videoWidth : videoHeight;
+
+        const elCard = video.closest('.camera-card');
+        if (elCard) elCard.style.aspectRatio = `${largura} / ${altura}`;
     }
 
     function atualizarOrientacaoCamera(sessaoUI, cameraId, vertical, invertido) {
@@ -395,6 +428,26 @@
         aplicarTransformCamera(video);
     }
 
+    function atualizarDadosTorcedorCamera(sessaoUI, cameraId, nome, time) {
+        const elWrapper = sessaoUI.camerasPorId.get(cameraId);
+        if (!elWrapper) return;
+        renderizarDadosTorcedor(elWrapper.querySelector('.camera-card-torcedor'), { nome, time });
+    }
+
+    /**
+     * No momento do ontrack, videoWidth/videoHeight ainda são 0 (o vídeo
+     * ainda não carregou os metadados da track recebida) — loadedmetadata é
+     * o primeiro momento em que essas dimensões existem. Reaplica em toda
+     * carga, já que trocar de câmera (alternarCamera em camera.js) dispara
+     * um novo loadedmetadata com dimensões possivelmente diferentes.
+     */
+    function ajustarProporcaoCardAoCarregarVideo(video) {
+        if (video.videoWidth && video.videoHeight) {
+            ajustarProporcaoCard(video);
+        }
+        video.addEventListener('loadedmetadata', () => ajustarProporcaoCard(video));
+    }
+
     function criarPeerConnectionParaCamera(sessaoUI, iceConfig, cameraSocketId) {
         const pc = new RTCPeerConnection({ iceServers: montarIceServers(iceConfig) });
         sessaoUI.peerConnections.set(cameraSocketId, pc);
@@ -405,6 +458,7 @@
                 video.srcObject = event.streams[0];
                 video.closest('.camera-card').querySelector('.camera-card-label').textContent = 'Ao vivo';
                 video.play().catch(() => {});
+                ajustarProporcaoCardAoCarregarVideo(video);
             }
         };
 
@@ -497,6 +551,10 @@
 
         connection.on('rotacaoCameraAtualizada', ({ cameraId, rotacaoManual }) => {
             atualizarRotacaoManualCamera(sessaoUI, cameraId, rotacaoManual);
+        });
+
+        connection.on('dadosTorcedorAtualizados', ({ cameraId, nome, time }) => {
+            atualizarDadosTorcedorCamera(sessaoUI, cameraId, nome, time);
         });
 
         connection.on('cameraAtivaAtualizada', ({ cameraId }) => {

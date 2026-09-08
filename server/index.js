@@ -324,6 +324,25 @@ io.on('connection', (socket) => {
         io.to(grupoSessao(token)).emit('orientacaoCameraAtualizada', { cameraId: socket.cameraId, vertical, invertido });
     });
 
+    // Disparado pela câmera enquanto a pessoa digita nome/time (com debounce
+    // no cliente) — sem isso, esses dados só chegavam ao dashboard no momento
+    // em que a transmissão era iniciada, então preenchê-los depois de já estar
+    // transmitindo nunca aparecia para quem está assistindo.
+    socket.on('atualizarDadosTorcedor', ({ token, nome, time }) => {
+        if (!socket.cameraId) return;
+        const nomeLimpo = String(nome || '').trim().slice(0, 60) || null;
+        const timeLimpo = String(time || '').trim().slice(0, 60) || null;
+
+        const cam = sessionStore.atualizarDadosTorcedor(token, socket.cameraId, nomeLimpo, timeLimpo);
+        if (!cam) return;
+
+        db.registrarCamera(token, socket.cameraId, nomeLimpo).catch((erro) => console.error('[db] Falha ao atualizar câmera:', erro));
+
+        sessionStore.listarDashboards(token).forEach((dashboardSocketId) => {
+            io.to(dashboardSocketId).emit('dadosTorcedorAtualizados', { cameraId: socket.cameraId, nome: nomeLimpo, time: timeLimpo });
+        });
+    });
+
     // Disparado pelo botão "girar" no dashboard — propaga a rotação manual
     // (independente da orientação automática) para quem está assistindo
     // (watch.html) e para outros dashboards abertos na mesma sessão.
